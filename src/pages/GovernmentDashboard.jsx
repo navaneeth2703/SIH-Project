@@ -1,15 +1,24 @@
+import { PageHeader, Card, CardContent, Badge } from '../components/ui';
+
 export default function GovernmentDashboard() {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-xs">
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 mb-4 border border-emerald-100">
-        <span>Route: /government</span>
-      </div>
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-        Government Dashboard
-      </h1>
-      <p className="mt-2 text-sm text-slate-500">
-        Placeholder view for government authority overview and challenge oversight.
-      </p>
+    <div>
+      <PageHeader
+        title="Government Dashboard"
+        description="Administrative portal for civic authorities to monitor challenges, pilot approvals, and city-wide impact metrics."
+        badge={<Badge variant="success">Route: /government</Badge>}
+      />
+
+      <Card variant="standard">
+        <CardContent>
+          <p className="text-sm text-slate-500">
+            Route active: <code className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">/government</code>
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            Placeholder view for government authority oversight. Reusable design system foundation and application shell are active.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

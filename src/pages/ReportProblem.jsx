@@ -1,15 +1,24 @@
+import { PageHeader, Card, CardContent, Badge } from '../components/ui';
+
 export default function ReportProblem() {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-xs">
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 mb-4">
-        <span>Route: /report</span>
-      </div>
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-        Report a Problem
-      </h1>
-      <p className="mt-2 text-sm text-slate-500">
-        Placeholder view for reporting societal challenges.
-      </p>
+    <div>
+      <PageHeader
+        title="Report a Problem"
+        description="Submit citizen challenges with structured context for AI-driven categorization and partner matching."
+        badge={<Badge variant="neutral">Route: /report</Badge>}
+      />
+
+      <Card variant="standard">
+        <CardContent>
+          <p className="text-sm text-slate-500">
+            Route active: <code className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">/report</code>
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            Placeholder view for reporting a societal challenge. Reusable design system foundation and application shell are active.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

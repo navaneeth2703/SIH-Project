@@ -1,15 +1,24 @@
+import { PageHeader, Card, CardContent, Badge } from '../components/ui';
+
 export default function Project() {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-xs">
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 mb-4">
-        <span>Route: /project</span>
-      </div>
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-        Project
-      </h1>
-      <p className="mt-2 text-sm text-slate-500">
-        Placeholder view for collaborative project lifecycle and milestone tracking.
-      </p>
+    <div>
+      <PageHeader
+        title="Project"
+        description="Collaborative problem-solving lifecycle tracking across universities, industry partners, and civic stakeholders."
+        badge={<Badge variant="neutral">Route: /project</Badge>}
+      />
+
+      <Card variant="standard">
+        <CardContent>
+          <p className="text-sm text-slate-500">
+            Route active: <code className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">/project</code>
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            Placeholder view for project lifecycle monitoring. Reusable design system foundation and application shell are active.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

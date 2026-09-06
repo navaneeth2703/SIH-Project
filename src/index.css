@@ -13,3 +13,14 @@
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* Custom design tokens and utilities for Samadhan Setu */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.subtle-ring {
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+}

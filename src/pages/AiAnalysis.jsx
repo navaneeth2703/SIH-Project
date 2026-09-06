@@ -1,15 +1,24 @@
+import { PageHeader, Card, CardContent, Badge } from '../components/ui';
+
 export default function AiAnalysis() {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-xs">
-      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-violet-50 text-violet-700 mb-4 border border-violet-100">
-        <span>Route: /analysis</span>
-      </div>
-      <h1 className="text-3xl font-bold tracking-tight text-slate-900">
-        AI Analysis
-      </h1>
-      <p className="mt-2 text-sm text-slate-500">
-        Placeholder view for AI understanding and partner matching analysis.
-      </p>
+    <div>
+      <PageHeader
+        title="AI Analysis"
+        description="Explainable natural language understanding, root-cause categorization, and institutional match recommendations."
+        badge={<Badge variant="AI">Route: /analysis</Badge>}
+      />
+
+      <Card variant="standard">
+        <CardContent>
+          <p className="text-sm text-slate-500">
+            Route active: <code className="font-mono text-xs bg-slate-100 px-1.5 py-0.5 rounded text-slate-700">/analysis</code>
+          </p>
+          <p className="mt-2 text-sm text-slate-600">
+            Placeholder view for AI Analysis and partner matching. Reusable design system foundation and application shell are active.
+          </p>
+        </CardContent>
+      </Card>
     </div>
   );
 }

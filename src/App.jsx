@@ -11,8 +11,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<Layout />}>
+        {/* Full-bleed layout for Landing (hero needs edge-to-edge) */}
+        <Route element={<Layout variant="fullBleed" />}>
           <Route index element={<Landing />} />
+        </Route>
+
+        {/* Standard constrained layout for all other routes */}
+        <Route element={<Layout />}>
           <Route path="report" element={<ReportProblem />} />
           <Route path="analysis" element={<AiAnalysis />} />
           <Route path="project" element={<Project />} />
@@ -23,3 +28,4 @@ export default function App() {
     </BrowserRouter>
   );
 }
+
