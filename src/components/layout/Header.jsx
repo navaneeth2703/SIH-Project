@@ -1,19 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { NavLink, Link } from 'react-router-dom';
 import Button from '../ui/Button';
+import { getActiveRole } from '../../services/roleState';
 
 export default function Header() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeRole, setActiveRoleState] = useState(() => getActiveRole());
+
+  useEffect(() => {
+    const handleSync = () => setActiveRoleState(getActiveRole());
+    window.addEventListener('samadhan_active_role_change', handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener('samadhan_active_role_change', handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
 
   const mainNavItems = [
-    { name: 'Challenges', path: '/' },
-    { name: 'How It Works', path: '/#how-it-works' },
-    { name: 'Impact', path: '/#impact' },
+    { name: 'Challenges', path: '/challenges' },
+    { name: 'How It Works', path: '/how-it-works' },
+    { name: 'Impact', path: '/impact' },
   ];
 
   const platformNavItems = [
-    { name: 'AI Analysis', path: '/analysis', badge: 'AI' },
-    { name: 'Project Lifecycle', path: '/project' },
+    { name: 'AI Analysis', path: '/ai-analysis', badge: 'AI' },
+    { name: 'Project Lifecycle', path: '/project-lifecycle' },
     { name: 'Government', path: '/government' },
   ];
 
@@ -91,14 +103,42 @@ export default function Header() {
 
           {/* Right Action buttons */}
           <div className="hidden sm:flex items-center gap-2.5 shrink-0">
-            <Button
-              variant="ghost"
-              size="sm"
-              to="/government"
-              className="text-slate-700 hover:text-slate-900"
-            >
-              Login
-            </Button>
+            {activeRole ? (
+              <Link
+                to="/login"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                  activeRole === 'university'
+                    ? 'bg-violet-50 text-violet-700 border-violet-200 hover:bg-violet-100'
+                    : activeRole === 'industry'
+                    ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
+                    : activeRole === 'government'
+                    ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                    : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                }`}
+                title="Active demonstration role — click to switch role"
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                <span>
+                  Role: {activeRole === 'university'
+                    ? 'University'
+                    : activeRole === 'industry'
+                    ? 'Industry'
+                    : activeRole === 'government'
+                    ? 'Government'
+                    : 'Citizen'}
+                </span>
+                <span className="text-[10px] opacity-60">▾</span>
+              </Link>
+            ) : (
+              <Button
+                variant="ghost"
+                size="sm"
+                to="/login"
+                className="text-slate-700 hover:text-slate-900"
+              >
+                Login
+              </Button>
+            )}
             <Button
               variant="primary"
               size="sm"
@@ -196,7 +236,7 @@ export default function Header() {
             <Button
               variant="secondary"
               size="md"
-              to="/government"
+              to="/login"
               fullWidth
               onClick={() => setMobileMenuOpen(false)}
             >

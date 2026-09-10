@@ -29,6 +29,104 @@ export const PRIMARY_GEMINI_MODEL = 'gemini-3.6-flash';
 export const FALLBACK_GEMINI_MODEL = 'gemini-3.5-flash';
 export const GEMINI_MODEL = PRIMARY_GEMINI_MODEL;
 
+/**
+ * Retry and Backoff Configuration for Hackathon Prototype
+ */
+export const RETRY_CONFIG = {
+  maxRetriesPerModel: 1, // 1 retry per model (2 attempts max per model, 4 total across failover)
+  initialDelayMs: 1500,   // Base backoff 1.5s
+  maxDelayMs: 10000,      // Maximum wait per retry 10s
+  backoffFactor: 2,       // Exponential multiplier
+  jitterMs: 400,          // Random jitter to prevent synchronized retries
+  interModelCooldownMs: 1500, // Cooldown before failing over from primary to fallback model
+};
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Sanitize error messages and strings so no API keys or key query params are leaked
+ */
+export function sanitizeErrorMessage(message, apiKey) {
+  if (!message || typeof message !== 'string') return '';
+  let sanitized = message;
+  if (apiKey && typeof apiKey === 'string' && apiKey.trim()) {
+    sanitized = sanitized.replaceAll(apiKey.trim(), '[REDACTED_API_KEY]');
+  }
+  // Sanitize key= query parameters in URLs
+  sanitized = sanitized.replace(/([?&]key=)[^&\s"']+/gi, '$1[REDACTED_API_KEY]');
+  // Sanitize standard Google API key pattern (AIza...)
+  sanitized = sanitized.replace(/AIza[0-9A-Za-z-_]{35}/g, '[REDACTED_API_KEY]');
+  return sanitized;
+}
+
+/**
+ * Extract retry delay duration in milliseconds from Gemini HTTP response headers or error body
+ */
+export function extractRetryDelayMs(response, errJson) {
+  // 1. Check HTTP 'retry-after' header
+  try {
+    if (response?.headers) {
+      const retryAfter = typeof response.headers.get === 'function'
+        ? response.headers.get('retry-after')
+        : response.headers['retry-after'] || response.headers['Retry-After'];
+      if (retryAfter) {
+        const seconds = parseFloat(retryAfter);
+        if (!isNaN(seconds) && seconds > 0) {
+          return Math.round(seconds * 1000);
+        }
+        const dateMs = Date.parse(retryAfter);
+        if (!isNaN(dateMs)) {
+          const diff = dateMs - Date.now();
+          if (diff > 0) return diff;
+        }
+      }
+    }
+  } catch {
+    // Ignore header read issues
+  }
+
+  // 2. Check Google RPC RetryInfo in error.details
+  if (Array.isArray(errJson?.error?.details)) {
+    for (const detail of errJson.error.details) {
+      if (detail && (detail['@type']?.includes('RetryInfo') || detail.retryDelay !== undefined)) {
+        const delay = detail.retryDelay;
+        if (typeof delay === 'string') {
+          if (delay.endsWith('ms')) {
+            const ms = parseFloat(delay);
+            if (!isNaN(ms) && ms > 0) return Math.round(ms);
+          } else if (delay.endsWith('s')) {
+            const s = parseFloat(delay);
+            if (!isNaN(s) && s > 0) return Math.round(s * 1000);
+          } else {
+            const val = parseFloat(delay);
+            if (!isNaN(val) && val > 0) return Math.round(val * 1000);
+          }
+        } else if (typeof delay === 'number' && delay > 0) {
+          return Math.round(delay * 1000);
+        } else if (typeof delay === 'object' && delay !== null) {
+          const seconds = Number(delay.seconds || 0);
+          const nanos = Number(delay.nanos || 0);
+          const totalMs = seconds * 1000 + Math.round(nanos / 1e6);
+          if (totalMs > 0) return totalMs;
+        }
+      }
+    }
+  }
+
+  // 3. Check error message regex patterns (e.g. "Please retry after 15s" or "reset in 12s")
+  const msg = errJson?.error?.message || '';
+  const match = msg.match(/(?:retry\s+(?:after|in)|reset\s+in)\s+([0-9.]+)\s*(s|sec|seconds|ms)?/i);
+  if (match) {
+    const val = parseFloat(match[1]);
+    const unit = (match[2] || 's').toLowerCase();
+    if (!isNaN(val) && val > 0) {
+      return unit === 'ms' ? Math.round(val) : Math.round(val * 1000);
+    }
+  }
+
+  return null;
+}
+
 const STRUCTURED_RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
@@ -79,8 +177,9 @@ const STRUCTURED_RESPONSE_SCHEMA = {
 /**
  * Helper to call a specific Gemini model endpoint with structured JSON output
  */
-async function callGeminiEndpoint(modelName, apiKey, requestBody) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey.trim()}`;
+export async function callGeminiEndpoint(modelName, apiKey, requestBody) {
+  const trimmedKey = (apiKey || '').trim();
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(trimmedKey)}`;
 
   let response;
   try {
@@ -92,7 +191,8 @@ async function callGeminiEndpoint(modelName, apiKey, requestBody) {
       body: JSON.stringify(requestBody),
     });
   } catch (netErr) {
-    const error = new Error(`Network error while contacting Gemini API (${modelName}): ${netErr.message}`);
+    const sanitizedMsg = sanitizeErrorMessage(netErr?.message, trimmedKey);
+    const error = new Error(`Network error while contacting Gemini API (${modelName}): ${sanitizedMsg}`);
     error.code = 'NETWORK_ERROR';
     error.model = modelName;
     throw error;
@@ -100,18 +200,23 @@ async function callGeminiEndpoint(modelName, apiKey, requestBody) {
 
   if (!response.ok) {
     let errorDetail = '';
+    let errJson = null;
     try {
-      const errJson = await response.json();
-      errorDetail = errJson.error?.message || response.statusText;
+      errJson = await response.json();
+      errorDetail = errJson?.error?.message || response.statusText;
     } catch {
       errorDetail = response.statusText;
     }
 
-    const error = new Error(`Gemini API error from ${modelName} (${response.status}): ${errorDetail}`);
+    const sanitizedDetail = sanitizeErrorMessage(errorDetail, trimmedKey);
+    const retryDelayMs = extractRetryDelayMs(response, errJson);
+
+    const error = new Error(`Gemini API error from ${modelName} (${response.status}): ${sanitizedDetail}`);
     error.code = `HTTP_${response.status}`;
     error.status = response.status;
     error.model = modelName;
-    error.detail = errorDetail;
+    error.detail = sanitizedDetail;
+    error.retryDelayMs = retryDelayMs;
     throw error;
   }
 
@@ -120,7 +225,9 @@ async function callGeminiEndpoint(modelName, apiKey, requestBody) {
   // Extract JSON payload from candidate
   const candidateText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!candidateText) {
-    const error = new Error(`Gemini API (${modelName}) returned an empty or invalid response structure.`);
+    const finishReason = responseData.candidates?.[0]?.finishReason;
+    const reasonText = finishReason ? ` (Finish reason: ${finishReason})` : '';
+    const error = new Error(`Gemini API (${modelName}) returned an empty or invalid response structure.${reasonText}`);
     error.code = 'INVALID_RESPONSE';
     error.model = modelName;
     throw error;
@@ -139,11 +246,65 @@ async function callGeminiEndpoint(modelName, apiKey, requestBody) {
     parsed.usedModel = modelName;
     return parsed;
   } catch (parseErr) {
-    const error = new Error(`Failed to parse Gemini JSON output from ${modelName}: ${parseErr.message}`);
+    const sanitizedParse = sanitizeErrorMessage(parseErr?.message, trimmedKey);
+    const error = new Error(`Failed to parse Gemini JSON output from ${modelName}: ${sanitizedParse}`);
     error.code = 'PARSE_ERROR';
     error.model = modelName;
     throw error;
   }
+}
+
+/**
+ * Execute Gemini model call with exponential backoff and RetryInfo delay handling
+ */
+export async function callModelWithRetry(modelName, apiKey, requestBody, config = RETRY_CONFIG) {
+  const maxRetries = config.maxRetriesPerModel ?? 1;
+  const maxAttempts = 1 + maxRetries;
+  let lastError = null;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      return await callGeminiEndpoint(modelName, apiKey, requestBody);
+    } catch (err) {
+      lastError = err;
+      const isTransient = err.status === 429 || err.status === 503;
+      const isLastAttempt = attempt >= maxAttempts - 1;
+
+      // Fail immediately on non-transient errors (e.g. 400, 401, 403) or after final attempt
+      if (!isTransient || isLastAttempt) {
+        throw err;
+      }
+
+      const apiDelay = err.retryDelayMs;
+
+      // If the API specified a delay longer than maxDelayMs, do not lock up the client; proceed to failover
+      if (apiDelay && apiDelay > config.maxDelayMs) {
+        console.warn(
+          `[Gemini] ${modelName} returned HTTP ${err.status} with retry-delay ${apiDelay}ms exceeding prototype budget (${config.maxDelayMs}ms). Skipping further retries on ${modelName}.`
+        );
+        throw err;
+      }
+
+      // Calculate exponential backoff or use API-provided delay
+      let waitMs;
+      if (typeof apiDelay === 'number' && apiDelay > 0) {
+        const jitter = Math.floor(Math.random() * (config.jitterMs || 300));
+        waitMs = Math.min(apiDelay + jitter, config.maxDelayMs);
+      } else {
+        const factor = Math.pow(config.backoffFactor || 2, attempt);
+        const jitter = Math.floor(Math.random() * (config.jitterMs || 300));
+        waitMs = Math.min((config.initialDelayMs || 1500) * factor + jitter, config.maxDelayMs);
+      }
+
+      console.warn(
+        `[Gemini] ${modelName} returned HTTP ${err.status} (attempt ${attempt + 1}/${maxAttempts}). Backing off for ${waitMs}ms before retry...`
+      );
+
+      await sleep(waitMs);
+    }
+  }
+
+  throw lastError;
 }
 
 /**
@@ -209,26 +370,32 @@ Instructions:
     },
   };
 
-  // Attempt 1: Call Primary Model (gemini-3.6-flash)
+  // Attempt 1: Call Primary Model with retry & backoff
   try {
-    return await callGeminiEndpoint(PRIMARY_GEMINI_MODEL, apiKey, requestBody);
+    return await callModelWithRetry(PRIMARY_GEMINI_MODEL, apiKey, requestBody, RETRY_CONFIG);
   } catch (primaryErr) {
-    // Check if error is transient demand spike (503) or rate limit (429)
     const isTransientError = primaryErr.status === 503 || primaryErr.status === 429;
     if (isTransientError) {
       console.warn(
-        `Primary model (${PRIMARY_GEMINI_MODEL}) returned HTTP ${primaryErr.status} (${primaryErr.detail || primaryErr.message}). Gracefully failing over to ${FALLBACK_GEMINI_MODEL}...`
+        `Primary model (${PRIMARY_GEMINI_MODEL}) returned HTTP ${primaryErr.status} (${primaryErr.detail || primaryErr.message}). Waiting ${RETRY_CONFIG.interModelCooldownMs}ms cooldown before failing over to ${FALLBACK_GEMINI_MODEL}...`
       );
 
-      // Attempt 2: Failover to Fallback Model (gemini-3.5-flash)
+      // Requirement 5: Do not immediately fire multiple requests against the same quota window
+      await sleep(RETRY_CONFIG.interModelCooldownMs);
+
+      // Attempt 2: Failover to Fallback Model with retry & backoff
       try {
-        return await callGeminiEndpoint(FALLBACK_GEMINI_MODEL, apiKey, requestBody);
+        return await callModelWithRetry(FALLBACK_GEMINI_MODEL, apiKey, requestBody, RETRY_CONFIG);
       } catch (fallbackErr) {
-        console.error(`Fallback model (${FALLBACK_GEMINI_MODEL}) also failed:`, fallbackErr);
+        console.error(
+          `Fallback model (${FALLBACK_GEMINI_MODEL}) also failed:`,
+          sanitizeErrorMessage(fallbackErr.message, apiKey)
+        );
         const combinedError = new Error(
-          `AI Analysis temporarily unavailable: Primary model (${PRIMARY_GEMINI_MODEL}) encountered HTTP ${primaryErr.status} and fallback model (${FALLBACK_GEMINI_MODEL}) encountered HTTP ${fallbackErr.status || fallbackErr.message}. Please try again shortly.`
+          `AI Analysis temporarily unavailable: Primary model (${PRIMARY_GEMINI_MODEL}) encountered HTTP ${primaryErr.status} and fallback model (${FALLBACK_GEMINI_MODEL}) encountered HTTP ${fallbackErr.status || fallbackErr.message}. Rate limit / quota window active. Please try again shortly.`
         );
         combinedError.code = 'ALL_MODELS_FAILED';
+        combinedError.status = primaryErr.status || fallbackErr.status || 429;
         combinedError.primaryError = primaryErr;
         combinedError.fallbackError = fallbackErr;
         throw combinedError;
@@ -239,3 +406,4 @@ Instructions:
     throw primaryErr;
   }
 }
+

@@ -31,7 +31,7 @@ export default function Footer() {
             <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">Platform</h4>
             <ul className="space-y-2 text-xs text-slate-500">
               <li>
-                <Link to="/" className="hover:text-slate-900 transition-colors">
+                <Link to="/challenges" className="hover:text-slate-900 transition-colors">
                   Challenges
                 </Link>
               </li>
@@ -41,7 +41,7 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to="/analysis" className="hover:text-slate-900 transition-colors">
+                <Link to="/ai-analysis" className="hover:text-slate-900 transition-colors">
                   AI Analysis
                 </Link>
               </li>
@@ -53,7 +53,7 @@ export default function Footer() {
             <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">Governance</h4>
             <ul className="space-y-2 text-xs text-slate-500">
               <li>
-                <Link to="/project" className="hover:text-slate-900 transition-colors">
+                <Link to="/project-lifecycle" className="hover:text-slate-900 transition-colors">
                   Project Lifecycle
                 </Link>
               </li>
