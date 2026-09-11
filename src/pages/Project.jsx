@@ -922,7 +922,7 @@ export default function Project() {
   const selectedStage = STAGES_CONFIG[selectedStageIndex];
 
   return (
-    <div className="space-y-8">
+    <div className={`space-y-8 ${currentRole === 'government' ? '-mx-4 sm:-mx-6 lg:-mx-8 -my-8 md:-my-10 px-4 sm:px-6 lg:px-8 py-8 md:py-10 bg-[#fbfaf7] min-h-[calc(100vh-4rem)]' : ''}`}>
 
       {/* --- 1. PAGE HEADER --- */}
       <PageHeader
@@ -947,7 +947,7 @@ export default function Project() {
           ) : currentRole === 'industry' ? (
             <Badge variant="neutral">INDUSTRY / IMPLEMENTATION WORKSPACE</Badge>
           ) : currentRole === 'government' ? (
-            <Badge variant="neutral">GOVERNMENT REVIEW WORKSPACE</Badge>
+            <Badge variant="neutral" className="bg-amber-50 text-amber-900 border-amber-200 font-semibold">GOVERNMENT REVIEW WORKSPACE</Badge>
           ) : (
             <Badge variant="neutral">PROJECT LIFECYCLE</Badge>
           )
@@ -1059,18 +1059,18 @@ export default function Project() {
           </div>
         </div>
       ) : currentRole === 'government' ? (
-        <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-4 flex flex-col sm:flex-row sm:items-start gap-3.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-700 text-white font-bold text-xs" aria-hidden="true">
+        <div className="rounded-xl border border-amber-200/80 bg-gradient-to-r from-amber-50/70 via-white to-emerald-50/40 p-4 flex flex-col sm:flex-row sm:items-start gap-3.5 shadow-2xs">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-amber-400 font-bold text-xs border border-amber-500/30 shadow-2xs" aria-hidden="true">
             GOV
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-bold text-purple-900">Government Review Workspace — Administrative Governance</p>
-              <span className="text-[10px] font-semibold text-purple-700 bg-purple-100/80 px-2 py-0.5 rounded border border-purple-200">
+              <p className="text-sm font-bold text-slate-900">Government Review Workspace — Administrative Governance</p>
+              <span className="text-[10px] font-semibold text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-200">
                 Decision Authority
               </span>
             </div>
-            <p className="text-xs text-purple-800 leading-relaxed max-w-3xl">
+            <p className="text-xs text-slate-700 leading-relaxed max-w-3xl">
               AI recommends based on capability evidence; government decides whether challenges progress. Review potential collaborators, advance lifecycle stages, and record administrative determinations below.
             </p>
           </div>
@@ -1216,11 +1216,13 @@ export default function Project() {
 
       {/* --- GOVERNMENT ONLY: COLLABORATION INTEREST REVIEW SECTION --- */}
       {currentRole === 'government' && (
-        <Card variant="standard" className="border-indigo-100 bg-white shadow-xs overflow-hidden">
+        <Card variant="standard" className="border-slate-200/90 bg-white shadow-xs overflow-hidden">
+          {/* Subtle Government saffron-green hairline accent */}
+          <div className="h-[2px] w-full bg-gradient-to-r from-amber-500/80 via-amber-200/30 to-emerald-600/50" aria-hidden="true" />
           <CardHeader className="border-b border-slate-100 pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
-                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200 mb-1">
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-900 border border-amber-200 mb-1">
                   Stakeholder Intake Review
                 </div>
                 <CardTitle as="h2" className="text-base font-bold text-slate-900">
@@ -1582,23 +1584,30 @@ export default function Project() {
       {/* --- GOVERNMENT REVIEW / DECISION SECTION (Government role only) --- */}
       {currentRole === 'government' && (
 
-      <Card variant="standard" className="border-indigo-100 bg-white shadow-xs overflow-hidden">
-        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-5 text-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <Card variant="standard" className="border-stone-300/90 bg-white shadow-xs overflow-hidden">
+        {/* Crisp saffron-to-emerald hairline accent */}
+        <div className="h-1 w-full bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-600" aria-hidden="true" />
+        <div className="bg-slate-950 p-5 text-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-slate-800">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/20 text-indigo-200 border border-indigo-400/30 mb-1">
-              Administrative Governance
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] font-mono font-bold tracking-widest text-amber-400 uppercase">
+                04 / ADMINISTRATIVE GOVERNANCE
+              </span>
+              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wide">
+                Decision Authority
+              </span>
             </div>
-            <h2 className="text-base font-bold text-white">Government Review</h2>
-            <p className="text-xs text-slate-300 mt-0.5 max-w-xl">
-              <span className="font-semibold text-indigo-200">AI recommends. Government decides.</span> Potential collaborators are identified from capability evidence. Government review determines whether the proposed direction should proceed.
+            <h2 className="text-base sm:text-lg font-bold text-white tracking-tight">Government Review &amp; Official Determination</h2>
+            <p className="text-xs text-slate-300 mt-1 max-w-xl leading-relaxed">
+              <span className="font-bold text-amber-300">AI recommends. Government decides.</span> Review institutional evidence and record an administrative determination below to guide milestone progression.
             </p>
           </div>
           <div className="shrink-0 text-left sm:text-right">
-            <span className="text-[10px] font-bold text-indigo-300 uppercase tracking-wider block">
-              Current Determination
+            <span className="text-[9px] font-mono font-bold text-slate-400 uppercase tracking-widest block">
+              OFFICIAL DETERMINATION
             </span>
             <span
-              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold border mt-0.5 ${
+              className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-bold border mt-1 shadow-2xs ${
                 govDecision ? GOV_DECISION_META[govDecision].badgeColor : PENDING_REVIEW_META.badgeColor
               }`}
             >
@@ -1646,7 +1655,7 @@ export default function Project() {
                   <button
                     type="button"
                     onClick={() => setIsChangingDecision(false)}
-                    className="text-xs text-indigo-600 hover:underline cursor-pointer self-start sm:self-auto"
+                    className="text-xs text-slate-500 hover:text-slate-900 hover:underline cursor-pointer self-start sm:self-auto"
                   >
                     Cancel
                   </button>
@@ -1660,15 +1669,15 @@ export default function Project() {
                   onClick={() => handleMakeDecision('support')}
                   className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
                     govDecision === 'support'
-                      ? 'bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20'
-                      : 'bg-white hover:bg-emerald-50/40 border-slate-200 hover:border-emerald-300'
+                      ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-600/30 shadow-xs'
+                      : 'bg-white hover:bg-emerald-50/40 border-stone-300 hover:border-emerald-500'
                   }`}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                    <span className="h-2 w-2 rounded-full bg-emerald-600 shrink-0" />
                     <span className="text-xs font-bold text-emerald-950">Support / Proceed to Next Stage</span>
                   </div>
-                  <p className="text-[11px] text-slate-500 leading-tight">
+                  <p className="text-[11px] text-slate-600 leading-tight">
                     Endorse capability match to progress toward next stage review.
                   </p>
                 </button>
@@ -1679,15 +1688,15 @@ export default function Project() {
                   onClick={() => handleMakeDecision('hold')}
                   className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
                     govDecision === 'hold'
-                      ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/20'
-                      : 'bg-white hover:bg-amber-50/40 border-slate-200 hover:border-amber-300'
+                      ? 'bg-stone-100 border-stone-600 ring-2 ring-stone-400/30 shadow-xs'
+                      : 'bg-white hover:bg-stone-100/60 border-stone-300 hover:border-stone-500'
                   }`}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className="h-2 w-2 rounded-full bg-amber-500" />
-                    <span className="text-xs font-bold text-amber-950">Hold for Review</span>
+                    <span className="h-2 w-2 rounded-full bg-stone-500 shrink-0" />
+                    <span className="text-xs font-bold text-stone-900">Hold for Review</span>
                   </div>
-                  <p className="text-[11px] text-slate-500 leading-tight">
+                  <p className="text-[11px] text-slate-600 leading-tight">
                     Hold pending resource allocation and departmental review.
                   </p>
                 </button>
@@ -1698,15 +1707,15 @@ export default function Project() {
                   onClick={() => handleMakeDecision('information_requested')}
                   className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
                     govDecision === 'information_requested'
-                      ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500/20'
-                      : 'bg-white hover:bg-blue-50/40 border-slate-200 hover:border-blue-300'
+                      ? 'bg-amber-50 border-amber-500 ring-2 ring-amber-500/30 shadow-xs'
+                      : 'bg-white hover:bg-amber-50/40 border-stone-300 hover:border-amber-400'
                   }`}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className="h-2 w-2 rounded-full bg-blue-500" />
-                    <span className="text-xs font-bold text-blue-950">Request More Information</span>
+                    <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                    <span className="text-xs font-bold text-amber-950">Request More Information</span>
                   </div>
-                  <p className="text-[11px] text-slate-500 leading-tight">
+                  <p className="text-[11px] text-slate-600 leading-tight">
                     Ask for additional technical baseline and validation details.
                   </p>
                 </button>
@@ -1717,15 +1726,15 @@ export default function Project() {
                   onClick={() => handleMakeDecision('decline')}
                   className={`p-3 rounded-lg border text-left transition-all cursor-pointer ${
                     govDecision === 'decline'
-                      ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20'
-                      : 'bg-white hover:bg-rose-50/40 border-slate-200 hover:border-rose-300'
+                      ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/30 shadow-xs'
+                      : 'bg-white hover:bg-rose-50/40 border-stone-300 hover:border-rose-400'
                   }`}
                 >
                   <div className="flex items-center gap-1.5 mb-1">
-                    <span className="h-2 w-2 rounded-full bg-rose-500" />
+                    <span className="h-2 w-2 rounded-full bg-rose-500 shrink-0" />
                     <span className="text-xs font-bold text-rose-950">Decline</span>
                   </div>
-                  <p className="text-[11px] text-slate-500 leading-tight">
+                  <p className="text-[11px] text-slate-600 leading-tight">
                     Reviewed and not accepted for pilot progression at this time.
                   </p>
                 </button>
@@ -1912,7 +1921,7 @@ export default function Project() {
                         type="button"
                         disabled={activeStageIndex === STAGES_CONFIG.length - 1}
                         onClick={() => handleAdvanceStage(activeStageIndex + 1)}
-                        className="px-2 py-1 font-semibold text-indigo-700 hover:text-indigo-900 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
+                        className="px-2 py-1 font-semibold text-emerald-800 hover:text-emerald-950 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
                         title="Advance active stage"
                       >
                         Advance →
@@ -2420,10 +2429,10 @@ export default function Project() {
           ) : activeStageIndex === 4 ? (
             /* Challenge is at Adopted stage */
             currentRole === 'government' ? (
-              <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100/80 text-emerald-900 border border-emerald-200">
                       Final Review Gate
                     </span>
                     <span className="text-xs font-bold text-slate-900">Stage: Adopted</span>

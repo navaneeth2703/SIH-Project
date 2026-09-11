@@ -197,7 +197,7 @@ const STAGE_ORDER = {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="-mx-4 sm:-mx-6 lg:-mx-8 -my-8 md:-my-10 px-4 sm:px-6 lg:px-8 py-8 md:py-10 bg-[#fbfaf7] min-h-[calc(100vh-4rem)] space-y-7">
 
       {/* ─── PAGE HEADER ─────────────────────────────────────────────────── */}
       <PageHeader
@@ -205,12 +205,12 @@ const STAGE_ORDER = {
           { label: 'Home', href: '/' },
           { label: 'Government Dashboard' },
         ]}
-        badge={<Badge variant="neutral">PROTOTYPE DASHBOARD</Badge>}
+        badge={<Badge variant="neutral" className="bg-amber-50 text-amber-900 border-amber-200 font-semibold">GOVERNMENT WORKSPACE</Badge>}
         title="Government Dashboard"
         description="Review reported challenges, collaboration interest, and lifecycle status. Make decisions that close the loop for all stakeholders."
         actions={
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold shadow-2xs">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
               <span>Demonstration Environment</span>
             </div>
@@ -218,30 +218,43 @@ const STAGE_ORDER = {
         }
       />
 
-      {/* ─── ROLE CONTEXT BANNER ─────────────────────────────────────────── */}
-      <div className="rounded-xl border border-purple-200/90 bg-purple-50/70 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-purple-900 text-white font-bold text-xs shadow-2xs">
-            GOV
+      {/* ─── ROLE CONTEXT BANNER / HERO AREA ─────────────────────────────── */}
+      <div className="rounded-xl border border-stone-300/80 bg-white shadow-xs overflow-hidden">
+        {/* Crisp saffron-to-emerald hairline accent */}
+        <div className="h-1 w-full bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-600" aria-hidden="true" />
+        
+        <div className="p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-950 text-amber-400 font-black text-sm border border-amber-400/30 shadow-xs ring-1 ring-slate-900/10">
+              GOV
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-[10px] font-mono font-bold tracking-widest text-amber-800 uppercase">
+                  CENTRAL ADMINISTRATIVE WORKSPACE
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-50 text-amber-950 border border-amber-300/80">
+                  REVIEW &amp; GOVERN
+                </span>
+              </div>
+              <h1 className="text-base sm:text-lg font-bold text-slate-950 tracking-tight mt-0.5">
+                Government Review &amp; Triage Control Center
+              </h1>
+              <p className="text-xs text-slate-600 mt-0.5 max-w-2xl">
+                Prioritize reported challenges, evaluate institutional capability evidence, and govern pilot-to-adoption progression.
+              </p>
+            </div>
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-purple-950 uppercase tracking-wide">
-                Government Review Workspace
+
+          <div className="flex items-center gap-4 text-xs border-t lg:border-t-0 lg:border-l border-stone-200 pt-3 lg:pt-0 lg:pl-5 shrink-0">
+            <div className="rounded-lg bg-stone-50 border border-stone-200/90 px-3.5 py-2">
+              <span className="text-[9px] font-mono font-bold tracking-wider text-slate-500 uppercase block">
+                OPERATIONAL PRINCIPLE
               </span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
-                REVIEW &amp; GOVERN
+              <span className="text-xs font-bold text-slate-950 block mt-0.5">
+                AI recommends. Government decides.
               </span>
             </div>
-            <p className="text-xs text-purple-800 mt-0.5">
-              Prioritize challenges, review evidence, and guide progression.
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-4 text-xs border-t sm:border-t-0 sm:border-l border-purple-200/80 pt-2 sm:pt-0 sm:pl-4">
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Operational Principle</span>
-            <span className="font-bold text-slate-900">AI recommends. Government decides.</span>
           </div>
         </div>
       </div>
@@ -258,21 +271,28 @@ const STAGE_ORDER = {
         </p>
       </div>
 
-      {/* ─── CHALLENGE INBOX (MAIN SECTION) ─────────────────────────────── */}
-      <Card variant="standard">
-        <CardHeader className="border-b border-slate-100 pb-4">
+      {/* ─── CHALLENGE INBOX (SECTION 01) ───────────────────────────────── */}
+      <Card variant="standard" className="border-stone-300/80 bg-white shadow-xs overflow-hidden">
+        {/* Saffron-to-emerald administrative rail */}
+        <div className="h-[3px] w-full bg-gradient-to-r from-amber-500 via-amber-400 to-emerald-600" aria-hidden="true" />
+        <CardHeader className="border-b border-stone-200/80 pb-4 bg-stone-50/40">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-purple-50 text-purple-800 border border-purple-200 mb-1.5">
-                Challenge Inbox
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="text-[10px] font-mono font-bold tracking-wider text-amber-900 bg-amber-100/80 px-2 py-0.5 rounded border border-amber-300/80">
+                  01 / CHALLENGE REVIEW
+                </span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                  Administrative Triage Inbox
+                </span>
               </div>
-              <CardTitle as="h2" className="text-lg">Challenges for Review</CardTitle>
+              <CardTitle as="h2" className="text-lg font-bold text-slate-950">Challenges for Review</CardTitle>
               <p className="text-xs text-slate-500 mt-0.5">
                 Review reported societal challenges, collaboration interest, and progression status.
               </p>
             </div>
             <div className="flex items-center gap-2 shrink-0 text-xs text-slate-400 pt-1">
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-indigo-200 bg-indigo-50 text-indigo-700 font-semibold text-[10px]">
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-amber-200 bg-amber-50/70 text-amber-900 font-semibold text-[10px]">
                 ■ Illustrative Demo
               </span>
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-600 font-semibold text-[10px]">
@@ -285,7 +305,7 @@ const STAGE_ORDER = {
         <CardContent className="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs" id="gov-challenge-inbox">
-              <thead className="bg-slate-50/80 border-b border-slate-100 text-slate-500 uppercase tracking-wider font-semibold text-[11px]">
+              <thead className="bg-stone-100/90 border-b border-stone-200 text-slate-700 uppercase tracking-wider font-semibold text-[11px]">
                 <tr>
                   <th className="py-2.5 px-4">Challenge &amp; Location</th>
                   <th className="py-2.5 px-3">Source</th>
@@ -297,7 +317,7 @@ const STAGE_ORDER = {
                   <th className="py-2.5 px-4 text-right">Action</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-100 text-slate-700">
+              <tbody className="divide-y divide-stone-200/70 text-slate-700">
                 {allChallenges.length === 0 ? (
                   <tr>
                     <td colSpan={8} className="py-6 px-4 text-center text-slate-400 text-xs">
@@ -310,8 +330,15 @@ const STAGE_ORDER = {
                     const decMeta = dec ? GOV_DECISION_META[dec.decision] : PENDING_REVIEW_META;
                     const collab = getCollaborationInterestsForChallenge(item.id);
                     const isSeeded = item.source === 'seeded';
+                    const severityBorder =
+                      item.severity?.toUpperCase() === 'HIGH'
+                        ? 'border-l-4 border-l-amber-500'
+                        : item.severity?.toUpperCase() === 'LOW'
+                        ? 'border-l-4 border-l-slate-300'
+                        : 'border-l-4 border-l-amber-300';
+
                     return (
-                      <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                      <tr key={item.id} className={`hover:bg-amber-50/25 transition-colors ${severityBorder}`}>
                         {/* Challenge title + location (compact & readable) */}
                         <td className="py-2.5 px-4 min-w-[280px] max-w-sm">
                           <p className="font-semibold text-slate-900 text-xs leading-snug">{item.title}</p>
@@ -327,7 +354,7 @@ const STAGE_ORDER = {
                         {/* Source badge */}
                         <td className="py-2.5 px-3 whitespace-nowrap">
                           {isSeeded ? (
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50/80 text-amber-900 border border-amber-200">
                               Illustrative Demo
                             </span>
                           ) : (
@@ -383,7 +410,7 @@ const STAGE_ORDER = {
                             onClick={() => navigate('/project-lifecycle', { state: { challengeId: item.id } })}
                             variant="primary"
                             size="sm"
-                            className="bg-indigo-900 hover:bg-indigo-800 text-xs py-1 px-3"
+                            className="bg-slate-900 hover:bg-slate-800 text-white text-xs py-1 px-3"
                           >
                             View Lifecycle →
                           </Button>
@@ -398,14 +425,20 @@ const STAGE_ORDER = {
         </CardContent>
       </Card>
 
-      {/* ─── POTENTIAL COLLABORATORS ──────────────────────────────────────── */}
-      <Card variant="standard">
-        <CardHeader className="border-b border-slate-100 pb-4">
+      {/* ─── POTENTIAL COLLABORATORS (SECTION 02) ───────────────────────── */}
+      <Card variant="standard" className="border-stone-300/80 bg-white shadow-xs overflow-hidden">
+        <div className="h-[2px] w-full bg-gradient-to-r from-stone-400 via-stone-300 to-slate-400" aria-hidden="true" />
+        <CardHeader className="border-b border-stone-200/80 pb-4 bg-stone-50/30">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-violet-50 text-violet-800 border border-violet-200 mb-1">
-              Capability Matching
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="text-[10px] font-mono font-bold tracking-wider text-slate-700 bg-stone-100 px-2 py-0.5 rounded border border-stone-200">
+                02 / CAPABILITY MATCHING
+              </span>
+              <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                Documented Capabilities
+              </span>
             </div>
-            <CardTitle as="h2" className="text-lg">Potential Collaborators</CardTitle>
+            <CardTitle as="h2" className="text-lg font-bold text-slate-950">Potential Collaborators</CardTitle>
             <p className="text-xs text-slate-500 mt-0.5">
               Potential matches from documented institutional capabilities — not confirmed partnerships.
             </p>
@@ -427,14 +460,14 @@ const STAGE_ORDER = {
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded">
                         {inst.type}
                       </span>
                     </div>
                     <h3 className="text-sm font-bold text-slate-900 mt-2">{inst.name}</h3>
                     <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{inst.fullName}</p>
                     <p className="text-[11px] font-semibold text-slate-700 mt-2">
-                      Domain: <span className="text-indigo-950 font-normal">{inst.domain}</span>
+                      Domain: <span className="text-slate-900 font-medium">{inst.domain}</span>
                     </p>
                     <ul className="mt-2 space-y-0.5">
                       {inst.capabilities.map((cap) => (
@@ -472,30 +505,41 @@ const STAGE_ORDER = {
         </CardContent>
       </Card>
 
-      {/* ─── WHAT GOVERNMENT CAN DO (COMPACT GUIDANCE) ───────────────────── */}
-      <Card variant="standard">
-        <CardHeader className="border-b border-slate-100 pb-3">
-          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 mb-1">
-            Administrative Purpose
+      {/* ─── WHAT GOVERNMENT CAN DO (SECTION 03) ───────────────────────── */}
+      <Card variant="standard" className="border-stone-300/80 bg-white shadow-xs overflow-hidden">
+        <div className="h-[2px] w-full bg-gradient-to-r from-amber-500/70 via-stone-300 to-emerald-500/50" aria-hidden="true" />
+        <CardHeader className="border-b border-stone-200/80 pb-3 bg-stone-50/30">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-[10px] font-mono font-bold tracking-wider text-slate-700 bg-stone-100 px-2 py-0.5 rounded border border-stone-200">
+              03 / ADMINISTRATIVE ACTION
+            </span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              Governance Protocols
+            </span>
           </div>
-          <CardTitle as="h2" className="text-base">What Government Can Do</CardTitle>
+          <CardTitle as="h2" className="text-base font-bold text-slate-950">What Government Can Do</CardTitle>
         </CardHeader>
         <CardContent className="p-5">
-          <ul className="space-y-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
             {GOV_GUIDANCE.map((item, i) => (
-              <li key={i} className="flex items-start gap-2.5 text-sm text-slate-700">
-                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded bg-indigo-900 text-white text-[10px] font-extrabold mt-0.5">
+              <div
+                key={i}
+                className="flex items-start gap-3 p-3 rounded-lg border border-stone-200/80 bg-stone-50/50 hover:bg-white transition-colors shadow-2xs"
+              >
+                <span className="flex h-6 w-7 shrink-0 items-center justify-center rounded-md bg-slate-950 text-amber-400 text-xs font-mono font-bold shadow-2xs border border-amber-400/20">
                   {String(i + 1).padStart(2, '0')}
                 </span>
-                {item}
-              </li>
+                <p className="text-xs text-slate-700 font-medium leading-relaxed pt-0.5">
+                  {item}
+                </p>
+              </div>
             ))}
-          </ul>
+          </div>
         </CardContent>
       </Card>
 
       {/* ─── BOTTOM CTA ──────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-slate-200/80 bg-white p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
+      <div className="rounded-xl border border-stone-300/80 bg-white p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xs">
         <div>
           <h3 className="text-sm font-bold text-slate-900">Explore the Full Problem Resolution Journey</h3>
           <p className="text-xs text-slate-500 mt-0.5">
@@ -510,7 +554,7 @@ const STAGE_ORDER = {
             onClick={() => navigate('/project-lifecycle', { state: { challengeId: 'bistupur-traffic' } })}
             variant="primary"
             size="sm"
-            className="bg-indigo-900 hover:bg-indigo-800"
+            className="bg-slate-900 hover:bg-slate-800 text-white shadow-xs"
           >
             Inspect Project Lifecycle →
           </Button>

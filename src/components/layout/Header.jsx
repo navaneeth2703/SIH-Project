@@ -126,6 +126,9 @@ export default function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
+      {activeRole === 'government' && (
+        <div className="h-[2px] w-full bg-gradient-to-r from-amber-500 via-amber-300 to-emerald-600" aria-hidden="true" />
+      )}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo / Wordmark */}
@@ -161,7 +164,9 @@ export default function Header() {
                 className={({ isActive }) =>
                   `inline-flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
                     isActive
-                      ? 'text-indigo-950 bg-indigo-50 font-semibold'
+                      ? item.path === '/government'
+                        ? 'text-amber-950 bg-amber-50/90 font-semibold border-b-2 border-amber-600 rounded-b-none'
+                        : 'text-indigo-950 bg-indigo-50 font-semibold'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`
                 }
@@ -286,12 +291,19 @@ export default function Header() {
                       : activeRole === 'industry'
                       ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
                       : activeRole === 'government'
-                      ? 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                      ? 'bg-gradient-to-r from-amber-50/90 via-white to-emerald-50/70 text-slate-800 border-amber-200/90 shadow-2xs hover:border-amber-300'
                       : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
                   }`}
                   title="Active demonstration role — click to switch role"
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  {activeRole === 'government' ? (
+                    <span className="inline-flex items-center gap-0.5 shrink-0" aria-hidden="true">
+                      <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                    </span>
+                  ) : (
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                  )}
                   <span>Role: {roleDisplayName}</span>
                   <span className="text-[10px] opacity-60">▾</span>
                 </Link>
@@ -373,7 +385,9 @@ export default function Header() {
                 className={({ isActive }) =>
                   `flex items-center justify-between px-3 py-2 text-base font-medium rounded-md ${
                     isActive
-                      ? 'bg-indigo-50 text-indigo-950 font-semibold'
+                      ? item.path === '/government'
+                        ? 'bg-amber-50 text-amber-950 font-semibold border-l-2 border-amber-600'
+                        : 'bg-indigo-50 text-indigo-950 font-semibold'
                       : 'text-slate-700 hover:bg-slate-50'
                   }`
                 }
