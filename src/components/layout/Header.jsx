@@ -129,6 +129,9 @@ export default function Header() {
       {activeRole === 'government' && (
         <div className="h-[2px] w-full bg-gradient-to-r from-amber-500 via-amber-300 to-emerald-600" aria-hidden="true" />
       )}
+      {activeRole === 'citizen' && (
+        <div className="h-[2px] w-full bg-gradient-to-r from-teal-600 via-teal-400 to-sky-500" aria-hidden="true" />
+      )}
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between gap-4">
           {/* Logo / Wordmark */}
@@ -292,7 +295,9 @@ export default function Header() {
                       ? 'bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100'
                       : activeRole === 'government'
                       ? 'bg-gradient-to-r from-amber-50/90 via-white to-emerald-50/70 text-slate-800 border-amber-200/90 shadow-2xs hover:border-amber-300'
-                      : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                      : activeRole === 'citizen'
+                      ? 'bg-gradient-to-r from-teal-50/95 via-white to-sky-50/70 text-teal-950 border-teal-200/90 shadow-2xs hover:border-teal-300'
+                      : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
                   }`}
                   title="Active demonstration role — click to switch role"
                 >
@@ -300,6 +305,11 @@ export default function Header() {
                     <span className="inline-flex items-center gap-0.5 shrink-0" aria-hidden="true">
                       <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-600" />
+                    </span>
+                  ) : activeRole === 'citizen' ? (
+                    <span className="inline-flex items-center gap-0.5 shrink-0" aria-hidden="true">
+                      <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
+                      <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
                     </span>
                   ) : (
                     <span className="h-1.5 w-1.5 rounded-full bg-current" />
@@ -338,6 +348,7 @@ export default function Header() {
                 variant="primary"
                 size="sm"
                 to="/report"
+                className={activeRole === 'citizen' ? 'bg-teal-700 hover:bg-teal-800 text-white shadow-xs font-semibold' : ''}
                 icon={
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
@@ -421,6 +432,7 @@ export default function Header() {
                 size="md"
                 to="/report"
                 fullWidth
+                className={activeRole === 'citizen' ? 'bg-teal-700 hover:bg-teal-800 text-white font-semibold' : ''}
                 onClick={() => setMobileMenuOpen(false)}
               >
                 Report a Problem

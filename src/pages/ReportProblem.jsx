@@ -318,41 +318,46 @@ export default function ReportProblem() {
           { label: 'Home', href: '/' },
           { label: 'Report a Problem' },
         ]}
-        badge={<Badge variant="neutral">Citizen Problem Intake</Badge>}
+        badge={
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-teal-50 text-teal-800 border border-teal-200 shadow-2xs">
+            <span className="h-1.5 w-1.5 rounded-full bg-teal-600 animate-pulse" />
+            Citizen Problem Intake
+          </span>
+        }
         title="Report a Problem"
-        description="Citizens can submit societal challenges which will be analyzed by explainable AI and connected to capable university researchers and industry partners."
+        description="Tell us about a problem in your community. Explainable AI analyzes the issue and connects it to capable university researchers, industry partners, and government reviewers."
       />
 
       {/* Role Context Indicator: Citizen Workspace */}
-      <div className="rounded-xl border border-blue-200/80 bg-blue-50/70 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+      <div className="rounded-xl border border-teal-200/90 bg-gradient-to-r from-teal-50/90 via-white to-sky-50/40 p-3.5 sm:p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-900 text-white font-bold text-xs shadow-2xs">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-800 text-white font-bold text-xs shadow-2xs">
             CTZ
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-blue-950 uppercase tracking-wide">
+              <span className="text-xs font-bold text-teal-950 uppercase tracking-wide">
                 Citizen Workspace
               </span>
-              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 border border-blue-200">
-                CITIZEN — REPORT &amp; TRACK
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-100/80 text-teal-900 border border-teal-200">
+                COMMUNITY REPORTING &amp; TRACKING
               </span>
             </div>
-            <p className="text-xs text-blue-800 mt-0.5">
-              Report a community problem and follow its progress.
+            <p className="text-xs text-teal-800 mt-0.5">
+              Report a problem in your community and track its progress across university, industry, and government stages.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-4 text-xs border-t sm:border-t-0 sm:border-l border-blue-200/80 pt-2 sm:pt-0 sm:pl-4">
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Your Role</span>
-            <span className="font-bold text-slate-900">Citizen</span>
-          </div>
-          <div className="h-6 w-px bg-blue-200/70" />
-          <div>
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Your Contribution</span>
-            <span className="text-slate-700 font-medium">Report and track societal challenges.</span>
+        <div className="flex items-center gap-4 text-xs border-t sm:border-t-0 sm:border-l border-teal-200/80 pt-2 sm:pt-0 sm:pl-4">
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-teal-900 bg-teal-100/70 px-2 py-0.5 rounded">
+              <span>REPORT</span>
+              <span className="text-teal-400">→</span>
+              <span>TRACK</span>
+              <span className="text-teal-400">→</span>
+              <span>PARTICIPATE</span>
+            </span>
           </div>
         </div>
       </div>
@@ -364,13 +369,13 @@ export default function ReportProblem() {
         </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {/* 01 Describe - Visually Active */}
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-indigo-50/80 border border-indigo-200/80 ring-2 ring-indigo-500/20">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-indigo-900 text-white text-xs font-bold shadow-xs">
+          <div className="flex items-center gap-3 p-3 rounded-lg bg-teal-50/90 border border-teal-300 ring-2 ring-teal-500/20 shadow-2xs">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-teal-800 text-white text-xs font-bold shadow-xs">
               01
             </span>
             <div>
-              <p className="text-xs font-bold text-indigo-950">Describe</p>
-              <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">Active Step</p>
+              <p className="text-xs font-bold text-teal-950">Describe</p>
+              <p className="text-[10px] font-semibold text-teal-700 uppercase tracking-wider">Active Step</p>
             </div>
           </div>
 
@@ -413,18 +418,19 @@ export default function ReportProblem() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* LEFT COLUMN: Problem Description Form */}
         <div className="lg:col-span-7 xl:col-span-8">
-          <Card variant="standard">
+          <Card variant="standard" className="overflow-hidden">
+            <div className="h-[2.5px] w-full bg-gradient-to-r from-teal-600 via-teal-400 to-sky-500" aria-hidden="true" />
             <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
               <div>
-                <CardTitle as="h2">Problem Description Form</CardTitle>
+                <CardTitle as="h2">Tell us about a problem in your community</CardTitle>
                 <p className="text-xs text-slate-500 mt-1">
-                  Fields marked with an asterisk (<span className="text-rose-500 font-bold">*</span>) are required.
+                  Describe what is happening, specify the location, and let AI analyze the challenge. Required fields (<span className="text-rose-500 font-bold">*</span>).
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleResetDemoSample}
-                className="text-xs font-medium text-indigo-700 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100/80 px-2.5 py-1.5 rounded-md border border-indigo-200 transition-colors"
+                className="text-xs font-medium text-teal-800 hover:text-teal-950 bg-teal-50 hover:bg-teal-100/80 px-2.5 py-1.5 rounded-md border border-teal-200 transition-colors cursor-pointer"
               >
                 Reset Demo Sample
               </button>
@@ -449,7 +455,7 @@ export default function ReportProblem() {
                     className={`w-full rounded-lg border px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-colors ${
                       errors.title
                         ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200'
-                        : 'border-slate-300 focus:border-indigo-600 focus:ring-indigo-100'
+                        : 'border-slate-300 focus:border-teal-600 focus:ring-teal-100'
                     }`}
                   />
                   {errors.title && (
@@ -468,7 +474,7 @@ export default function ReportProblem() {
                     id="problem-category"
                     value={formData.category}
                     onChange={(e) => handleInputChange('category', e.target.value)}
-                    className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:border-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-colors"
+                    className="w-full rounded-lg border border-slate-300 bg-white px-3.5 py-2.5 text-sm text-slate-900 focus:border-teal-600 focus:outline-none focus:ring-2 focus:ring-teal-100 transition-colors"
                   >
                     {CATEGORIES.map((cat) => (
                       <option key={cat} value={cat}>
@@ -498,7 +504,7 @@ export default function ReportProblem() {
                     className={`w-full rounded-lg border px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-colors leading-relaxed ${
                       errors.description
                         ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200'
-                        : 'border-slate-300 focus:border-indigo-600 focus:ring-indigo-100'
+                        : 'border-slate-300 focus:border-teal-600 focus:ring-teal-100'
                     }`}
                   />
                   {errors.description && (
@@ -518,9 +524,9 @@ export default function ReportProblem() {
                       type="button"
                       onClick={handleUseLocation}
                       disabled={locating}
-                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-700 hover:text-indigo-900 disabled:opacity-50 transition-colors"
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-teal-700 hover:text-teal-900 disabled:opacity-50 transition-colors cursor-pointer"
                     >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <svg className="h-3.5 w-3.5 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z" />
                       </svg>
@@ -536,7 +542,7 @@ export default function ReportProblem() {
                     className={`w-full rounded-lg border px-3.5 py-2.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-colors ${
                       errors.location
                         ? 'border-rose-300 focus:border-rose-500 focus:ring-rose-200'
-                        : 'border-slate-300 focus:border-indigo-600 focus:ring-indigo-100'
+                        : 'border-slate-300 focus:border-teal-600 focus:ring-teal-100'
                     }`}
                   />
                   {locationMessage && (
@@ -560,7 +566,7 @@ export default function ReportProblem() {
                   <label className="block text-sm font-medium text-slate-900 mb-1.5">
                     Evidence Upload (Optional)
                   </label>
-                  <div className="rounded-xl border-2 border-dashed border-slate-200 hover:border-slate-300 p-5 text-center transition-colors bg-slate-50/50">
+                  <div className="rounded-xl border-2 border-dashed border-slate-200 hover:border-teal-300 p-5 text-center transition-colors bg-slate-50/50">
                     <input
                       type="file"
                       id="evidence-file-input"
@@ -572,7 +578,7 @@ export default function ReportProblem() {
                     {evidenceFile ? (
                       <div className="flex items-center justify-between bg-white border border-slate-200 rounded-lg p-3 max-w-md mx-auto">
                         <div className="flex items-center gap-2.5 truncate">
-                          <svg className="h-5 w-5 text-indigo-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                          <svg className="h-5 w-5 text-teal-700 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
                           </svg>
                           <div className="text-left truncate">
@@ -587,7 +593,7 @@ export default function ReportProblem() {
                         <button
                           type="button"
                           onClick={handleRemoveFile}
-                          className="text-slate-400 hover:text-rose-600 text-xs font-semibold px-2 py-1"
+                          className="text-slate-400 hover:text-rose-600 text-xs font-semibold px-2 py-1 cursor-pointer"
                         >
                           Remove
                         </button>
@@ -608,7 +614,7 @@ export default function ReportProblem() {
                           />
                         </svg>
                         <p className="text-xs font-medium text-slate-700">
-                          <span className="text-indigo-600 font-semibold hover:underline">Click to upload</span> or drag and drop
+                          <span className="text-teal-700 font-semibold hover:underline">Click to upload</span> or drag and drop
                         </p>
                         <p className="mt-1 text-[11px] text-slate-400">
                           Photos, site records, test reports, or documents (PNG, JPG, PDF up to 15MB)
@@ -634,7 +640,7 @@ export default function ReportProblem() {
                     type="submit"
                     variant="primary"
                     size="lg"
-                    className="w-full sm:w-auto bg-indigo-900 hover:bg-indigo-800"
+                    className="w-full sm:w-auto bg-teal-700 hover:bg-teal-800 text-white shadow-xs font-semibold cursor-pointer"
                     icon={
                       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
@@ -671,7 +677,7 @@ export default function ReportProblem() {
           {/* Card 1: What happens next? */}
           <Card variant="standard">
             <CardHeader className="pb-3 border-b border-slate-100">
-              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200 mb-1">
+              <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-semibold bg-teal-50 text-teal-800 border border-teal-200 mb-1">
                 Resolution Roadmap
               </div>
               <CardTitle as="h3">What happens next?</CardTitle>
@@ -699,10 +705,10 @@ export default function ReportProblem() {
           </Card>
 
           {/* Card 2: Not sure what to report? */}
-          <Card variant="standard" className="border-indigo-100 bg-indigo-50/30">
+          <Card variant="standard" className="border-teal-100 bg-teal-50/20">
             <CardHeader className="pb-2">
               <CardTitle as="h3" className="text-base flex items-center gap-2">
-                <span className="text-indigo-600">💡</span> Not sure what to report?
+                <span className="text-teal-700">💡</span> Not sure what to report?
               </CardTitle>
               <p className="text-xs text-slate-500 mt-1">
                 Any recurring community challenge that requires specialized expertise or multi-stakeholder collaboration:
@@ -716,13 +722,13 @@ export default function ReportProblem() {
                     <button
                       type="button"
                       onClick={() => handleApplyExample(ex)}
-                      className="text-left w-full p-2.5 rounded-lg bg-white border border-slate-200/80 hover:border-indigo-300 hover:bg-indigo-50/50 transition-colors group shadow-2xs"
+                      className="text-left w-full p-2.5 rounded-lg bg-white border border-slate-200/80 hover:border-teal-300 hover:bg-teal-50/50 transition-colors group shadow-2xs cursor-pointer"
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-slate-800 group-hover:text-indigo-900">
+                        <span className="font-semibold text-slate-800 group-hover:text-teal-900">
                           • {ex.label}
                         </span>
-                        <span className="text-[10px] text-indigo-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+                        <span className="text-[10px] text-teal-600 font-medium opacity-0 group-hover:opacity-100 transition-opacity">
                           Use Example →
                         </span>
                       </div>
@@ -738,7 +744,7 @@ export default function ReportProblem() {
 
           {/* Card 3: Dark Card: "Your problem can become a project." */}
           <div className="rounded-xl bg-slate-900 text-white p-6 shadow-sm border border-slate-800">
-            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-indigo-950 border border-indigo-800 text-[10px] font-semibold text-indigo-300 uppercase tracking-wide mb-3">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-teal-950/80 border border-teal-800/80 text-[10px] font-semibold text-teal-300 uppercase tracking-wide mb-3">
               Action-Oriented Platform
             </div>
             <h3 className="text-lg font-bold text-white tracking-tight">

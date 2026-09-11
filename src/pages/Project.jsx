@@ -1075,6 +1075,25 @@ export default function Project() {
             </p>
           </div>
         </div>
+      ) : currentRole === 'citizen' ? (
+        <div className="rounded-xl border border-teal-200/90 bg-gradient-to-r from-teal-50/90 via-white to-sky-50/40 p-4 flex flex-col sm:flex-row sm:items-start gap-4 shadow-2xs">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-800 text-white font-bold text-xs shadow-2xs" aria-hidden="true">
+            CTZ
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-teal-950 uppercase tracking-wide">
+                Citizen Workspace — Community Problem Tracking
+              </span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-teal-100/80 text-teal-900 border border-teal-200">
+                LIVE LIFECYCLE
+              </span>
+            </div>
+            <p className="text-xs text-teal-800 leading-relaxed max-w-3xl">
+              Track the journey of this community challenge from reporting to AI analysis, partner collaboration, field testing, and official government outcome verification.
+            </p>
+          </div>
+        </div>
       ) : (
         <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 flex flex-col sm:flex-row sm:items-start gap-4">
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-900 text-white" aria-hidden="true">
@@ -1096,11 +1115,12 @@ export default function Project() {
         <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold border ${
                 challenge.isCitizenSubmission
-                  ? 'bg-blue-50 text-blue-800 border-blue-200'
+                  ? 'bg-teal-50 text-teal-900 border-teal-200'
                   : 'bg-indigo-50 text-indigo-800 border-indigo-200'
               }`}>
+                {challenge.isCitizenSubmission && <span className="h-1.5 w-1.5 rounded-full bg-teal-600 inline-block" />}
                 {challenge.isCitizenSubmission ? 'Community Submission' : 'Citizen Report'}
               </span>
               {challenge.isCitizenSubmission ? (

@@ -494,13 +494,19 @@ export default function AiAnalysis() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3 p-3 rounded-lg bg-indigo-50/80 border border-indigo-200/80 ring-2 ring-indigo-500/20">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-indigo-900 text-white text-xs font-bold shadow-xs">
+          <div className={`flex items-center gap-3 p-3 rounded-lg ${
+            activeRole === 'citizen'
+              ? 'bg-teal-50/90 border border-teal-300 ring-2 ring-teal-500/20 shadow-2xs'
+              : 'bg-indigo-50/80 border border-indigo-200/80 ring-2 ring-indigo-500/20'
+          }`}>
+            <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-white text-xs font-bold shadow-xs ${
+              activeRole === 'citizen' ? 'bg-teal-800' : 'bg-indigo-900'
+            }`}>
               02
             </span>
             <div>
-              <p className="text-xs font-bold text-indigo-950">AI Analysis</p>
-              <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider">Active Step</p>
+              <p className={`text-xs font-bold ${activeRole === 'citizen' ? 'text-teal-950' : 'text-indigo-950'}`}>AI Analysis</p>
+              <p className={`text-[10px] font-semibold uppercase tracking-wider ${activeRole === 'citizen' ? 'text-teal-700' : 'text-indigo-600'}`}>Active Step</p>
             </div>
           </div>
 
@@ -531,7 +537,12 @@ export default function AiAnalysis() {
         <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-semibold ${
+                activeRole === 'citizen'
+                  ? 'bg-teal-50 text-teal-900 border border-teal-200'
+                  : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
+              }`}>
+                {activeRole === 'citizen' && <span className="h-1.5 w-1.5 rounded-full bg-teal-600 inline-block" />}
                 Citizen Report
               </span>
               {isFromSession && (
@@ -1019,7 +1030,7 @@ export default function AiAnalysis() {
                 </div>
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
+                    <span className="text-xs font-bold uppercase tracking-wider text-teal-900 bg-teal-100 px-2 py-0.5 rounded border border-teal-200">
                       Community Submission Published
                     </span>
                     <span className="text-xs font-mono text-slate-500">ID: {publishedRecord.id}</span>
@@ -1039,7 +1050,7 @@ export default function AiAnalysis() {
                   size="md"
                   to={`/project-lifecycle?challengeId=${encodeURIComponent(publishedRecord.id)}`}
                   state={{ challengeId: publishedRecord.id }}
-                  className="flex-1 sm:flex-initial bg-indigo-900 hover:bg-indigo-800"
+                  className="flex-1 sm:flex-initial bg-teal-700 hover:bg-teal-800 text-white shadow-xs font-semibold"
                 >
                   View Project Lifecycle →
                 </Button>
@@ -1099,7 +1110,7 @@ export default function AiAnalysis() {
                     }
                   }}
                   disabled={isPublishing || loading || Boolean(error)}
-                  className="flex-1 sm:flex-initial bg-indigo-900 hover:bg-indigo-800"
+                  className="flex-1 sm:flex-initial bg-teal-700 hover:bg-teal-800 text-white shadow-xs font-semibold cursor-pointer"
                   icon={
                     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />

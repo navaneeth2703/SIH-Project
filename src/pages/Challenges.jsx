@@ -305,7 +305,8 @@ function ChallengeCard({
             {challenge.stage}
           </span>
           {challenge.isCitizenSubmission && (
-            <span className="inline-flex items-center text-xs font-semibold px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border border-blue-200">
+            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-md bg-teal-50 text-teal-800 border border-teal-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
               Community Submission
             </span>
           )}
@@ -339,6 +340,8 @@ function ChallengeCard({
                 ? "bg-teal-50/70 border-teal-200/80 text-teal-950"
                 : activeRole === "government"
                 ? "bg-purple-50/70 border-purple-200/80 text-purple-950"
+                : activeRole === "citizen"
+                ? "bg-teal-50/70 border-teal-200/80 text-teal-950"
                 : "bg-blue-50/70 border-blue-200/80 text-blue-950"
             }`}
           >
@@ -815,6 +818,8 @@ export default function Challenges() {
             ? "Industry / Implementation Workspace"
             : activeRole === "government"
             ? "Government Review / Challenge Monitoring"
+            : activeRole === "citizen"
+            ? "Citizen Workspace — Community Problem Tracking"
             : "Explore Challenges"
         }
         description={
@@ -824,19 +829,28 @@ export default function Challenges() {
             ? "Implementation & Scale Perspective — Discover challenges where engineering, technology, implementation, or deployment capabilities may contribute."
             : activeRole === "government"
             ? "Government Review Perspective — Review community challenges, inspect AI-derived capability evidence, and govern progression."
+            : activeRole === "citizen"
+            ? "Review reported community challenges, track their progress from intake to real-world adoption, and explore collaborative solutions."
             : "Citizen and community submissions aggregated by Samadhan Setu. Each challenge has been categorised, severity-rated, and matched to potential institutional collaborators."
         }
         badge={
-          <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md border bg-indigo-50 text-indigo-700 border-indigo-200">
-            <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
-            {activeRole === "university"
-              ? "Research Opportunities"
-              : activeRole === "industry"
-              ? "Implementation Opportunities"
-              : activeRole === "government"
-              ? "Governance Review"
-              : "Demo Dataset"}
-          </span>
+          activeRole === "citizen" ? (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md border bg-teal-50 text-teal-800 border-teal-200 shadow-2xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-teal-600 animate-pulse" />
+              Community Reports
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-md border bg-indigo-50 text-indigo-700 border-indigo-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
+              {activeRole === "university"
+                ? "Research Opportunities"
+                : activeRole === "industry"
+                ? "Implementation Opportunities"
+                : activeRole === "government"
+                ? "Governance Review"
+                : "Demo Dataset"}
+            </span>
+          )
         }
         breadcrumbs={[
           { label: "Home", href: "/" },
@@ -854,6 +868,8 @@ export default function Challenges() {
               ? "bg-teal-50/70 border-teal-200/80 text-teal-950"
               : activeRole === "government"
               ? "bg-purple-50/70 border-purple-200/80 text-purple-950"
+              : activeRole === "citizen"
+              ? "bg-gradient-to-r from-teal-50/90 via-white to-sky-50/40 border-teal-200/90 text-teal-950"
               : "bg-blue-50/70 border-blue-200/80 text-blue-950"
           }`}
         >
@@ -866,6 +882,8 @@ export default function Challenges() {
                   ? "bg-teal-900 text-white"
                   : activeRole === "government"
                   ? "bg-purple-900 text-white"
+                  : activeRole === "citizen"
+                  ? "bg-teal-800 text-white shadow-2xs"
                   : "bg-blue-900 text-white"
               }`}
             >
@@ -917,16 +935,16 @@ export default function Challenges() {
             onClick={() => setViewTab("my-reports")}
             className={`text-xs sm:text-sm font-semibold px-3.5 py-1.5 rounded-lg transition-colors cursor-pointer flex items-center gap-1.5 ${
               viewTab === "my-reports"
-                ? "bg-indigo-900 text-white shadow-2xs"
-                : "bg-blue-50 text-blue-800 border border-blue-200 hover:bg-blue-100"
+                ? "bg-teal-800 text-white shadow-2xs"
+                : "bg-teal-50 text-teal-800 border border-teal-200 hover:bg-teal-100"
             }`}
           >
             <span>My Reports</span>
             <span
               className={`text-[11px] px-1.5 py-0.2 rounded-full font-bold ${
                 viewTab === "my-reports"
-                  ? "bg-indigo-800 text-white"
-                  : "bg-blue-200 text-blue-900"
+                  ? "bg-teal-900 text-white"
+                  : "bg-teal-200/80 text-teal-900"
               }`}
             >
               {citizenChallenges.length}
@@ -1042,7 +1060,7 @@ export default function Challenges() {
         </div>
       ) : viewTab === "my-reports" ? (
         <div className="flex flex-col items-center justify-center py-14 text-center bg-white border border-slate-200 rounded-xl p-8">
-          <div className="h-12 w-12 rounded-full bg-blue-50 text-blue-700 flex items-center justify-center mb-3">
+          <div className="h-12 w-12 rounded-full bg-teal-50 text-teal-700 border border-teal-200 flex items-center justify-center mb-3">
             <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
             </svg>
@@ -1051,7 +1069,7 @@ export default function Challenges() {
           <p className="text-xs text-slate-500 mb-4 max-w-sm">
             You have not submitted any community problem reports yet. Reports you submit will appear here with live tracking.
           </p>
-          <Button variant="primary" to="/report" className="bg-indigo-900 hover:bg-indigo-800">
+          <Button variant="primary" to="/report" className="bg-teal-700 hover:bg-teal-800 text-white shadow-xs font-semibold">
             Report a Problem →
           </Button>
         </div>

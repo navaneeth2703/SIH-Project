@@ -12,8 +12,8 @@ const DEMO_ROLES = [
     email: "citizen.demo@samadhansetu.in",
     redirectTo: "/report",
     description: "Report community problems and follow progress.",
-    nodeColor: "indigo",
-    badgeBg: "bg-blue-50 text-blue-700 border-blue-200",
+    nodeColor: "teal",
+    badgeBg: "bg-teal-50 text-teal-800 border-teal-200",
   },
   {
     id: "university",
