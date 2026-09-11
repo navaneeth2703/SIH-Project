@@ -29,6 +29,7 @@ export async function analyzeChallenge(problem) {
     return {
       primaryClassification: groqResult.primaryClassification,
       severity: groqResult.severity,
+      severityRationale: groqResult.severityRationale || '',
       confidence: groqResult.confidence,
       requiredExpertise: Array.isArray(groqResult.requiredExpertise)
         ? groqResult.requiredExpertise
@@ -56,6 +57,7 @@ export async function analyzeChallenge(problem) {
     return {
       primaryClassification: geminiResult.primaryClassification,
       severity: geminiResult.severity,
+      severityRationale: geminiResult.severityRationale || '',
       confidence: geminiResult.confidence,
       requiredExpertise: Array.isArray(geminiResult.requiredExpertise)
         ? geminiResult.requiredExpertise

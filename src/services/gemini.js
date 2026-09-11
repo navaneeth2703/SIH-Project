@@ -1,7 +1,8 @@
 /**
  * Samadhan Setu — Gemini AI Problem Analysis Service
- * Uses Google Gemini 1.5 Flash with structured JSON output schema.
+ * Uses Google Gemini with structured JSON output schema.
  */
+import { validateAndNormalizeAiResult } from './groq.js';
 
 const getEnvVar = (name) => {
   try {
@@ -127,17 +128,48 @@ export function extractRetryDelayMs(response, errJson) {
   return null;
 }
 
+// ─── Severity rubric shared with Gemini prompt ───────────────────────────────
+const GEMINI_SEVERITY_RUBRIC = `
+SEVERITY DECISION CRITERIA — Read carefully and apply based on the COMPLETE context, not individual keywords:
+
+HIGH — Assign when the problem involves ANY of the following:
+  • Immediate or substantial threat to human health, drinking water safety, or physical safety
+  • Chemical, biological, or industrial contamination with public or environmental exposure (e.g. discoloration, odor, chemical runoff, heavy metals, mining effluent in groundwater or waterways)
+  • Critical infrastructure or essential service failure (drinking water supply, sanitation, drainage)
+  • Large number of people affected (village-scale or above), especially vulnerable populations
+  • Environmental emergency or risk of irreversible environmental damage
+  • Mining, industrial, or agricultural contamination entering the food chain, water supply, or soil
+
+MEDIUM — Assign when the problem involves:
+  • Meaningful community-wide impact but no clear immediate severe health or safety risk
+  • Recurring civic infrastructure or service problem (traffic congestion, intermittent power, drainage issues, road deterioration)
+  • Substantial economic or livelihood impact without acute hazard
+  • Transport, access, or mobility disruption affecting a significant number of people
+  • Agricultural yield or irrigation reliability issues without confirmed contamination
+
+LOW — Assign when the problem involves:
+  • Minor local inconvenience with a small or limited affected population
+  • Non-urgent cosmetic, maintenance, or minor amenity issue
+  • Improvement or enhancement request with no immediate risk to health, safety, or essential services
+  • Isolated, localized issue with no scaling risk
+
+CRITICAL: Do NOT classify severity based on a single keyword alone. Consider the COMPLETE description.`;
+
 const STRUCTURED_RESPONSE_SCHEMA = {
   type: 'OBJECT',
   properties: {
     primaryClassification: {
       type: 'STRING',
-      description: 'The standardized civic problem domain label, e.g. Water & Environment, Traffic & Transport, Public Health & Sanitation, Agriculture & Irrigation, Civic Infrastructure, etc.',
+      description: 'The standardized civic problem domain label. Use exactly one of: "Water & Environment", "Traffic & Transport", "Public Health & Sanitation", "Agriculture & Irrigation", "Civic Infrastructure", "Energy & Power", "Waste Management", "Disaster Management", "Education & Skill Development", "Digital Inclusion".',
     },
     severity: {
       type: 'STRING',
       enum: ['HIGH', 'MEDIUM', 'LOW'],
-      description: 'Urgency and community risk level based on population impact, immediate danger, and infrastructure disruption.',
+      description: 'Severity determined by applying the SEVERITY DECISION CRITERIA. Consider the full problem context — health risk, contamination, affected population, urgency signals. Must be HIGH, MEDIUM, or LOW.',
+    },
+    severityRationale: {
+      type: 'STRING',
+      description: 'A single concise sentence (max 30 words) explaining the key reason why this specific severity was assigned. Shown directly to users. Example: "Potential exposure to contaminated groundwater near a mining area creates an immediate public-health risk for multiple villages."',
     },
     confidence: {
       type: 'NUMBER',
@@ -166,6 +198,7 @@ const STRUCTURED_RESPONSE_SCHEMA = {
   required: [
     'primaryClassification',
     'severity',
+    'severityRationale',
     'confidence',
     'requiredExpertise',
     'extractedKeywords',
@@ -236,15 +269,11 @@ export async function callGeminiEndpoint(modelName, apiKey, requestBody) {
   try {
     const parsed = JSON.parse(candidateText);
 
-    // Normalize confidence to 1 decimal place
-    if (parsed.confidence > 1 && parsed.confidence <= 100) {
-      parsed.confidence = parseFloat(parsed.confidence.toFixed(1));
-    } else if (parsed.confidence <= 1) {
-      parsed.confidence = parseFloat((parsed.confidence * 100).toFixed(1));
-    }
+    // Apply shared normalization and validation (handles confidence, severity, classification, etc.)
+    const normalized = validateAndNormalizeAiResult(parsed);
 
-    parsed.usedModel = modelName;
-    return parsed;
+    normalized.usedModel = modelName;
+    return normalized;
   } catch (parseErr) {
     const sanitizedParse = sanitizeErrorMessage(parseErr?.message, trimmedKey);
     const error = new Error(`Failed to parse Gemini JSON output from ${modelName}: ${sanitizedParse}`);
@@ -334,9 +363,9 @@ export async function analyzeChallengeWithGemini(problem) {
     throw error;
   }
 
-  const prompt = `
-You are the Lead GovTech AI Triage Specialist for "Samadhan Setu" (Smart India Hackathon SIH26043).
+  const prompt = `You are the Lead GovTech AI Triage Specialist for "Samadhan Setu" (Smart India Hackathon SIH26043).
 Your job is to objectively analyze citizen-reported societal challenges and extract structured technical taxonomy so the system can match the problem with suitable university researchers and industry partners.
+${GEMINI_SEVERITY_RUBRIC}
 
 Analyze this citizen report:
 - Problem Title: "${problem.title || 'Untitled'}"
@@ -345,12 +374,13 @@ Analyze this citizen report:
 - Problem Description: "${problem.description || ''}"
 
 Instructions:
-1. Determine the primary domain classification (e.g. Water & Environment, Traffic & Transport, Public Health & Sanitation, Agriculture & Irrigation, etc.).
-2. Assess severity (HIGH, MEDIUM, LOW) based on safety, health, economic impact, or community disruption.
-3. List 3 to 5 precise scientific/engineering expertise fields needed.
-4. Extract 4 to 6 key semantic keywords.
-5. Identify 3 to 4 plausible root causes or operational signals.
-6. Provide transparent, explainable reasoning describing why this classification and urgency was chosen. Avoid black-box buzzwords.
+1. Determine the primary domain classification. Use exactly one of: "Water & Environment", "Traffic & Transport", "Public Health & Sanitation", "Agriculture & Irrigation", "Civic Infrastructure", "Energy & Power", "Waste Management", "Disaster Management", "Education & Skill Development", "Digital Inclusion".
+2. Apply the SEVERITY DECISION CRITERIA above. Assess severity (HIGH, MEDIUM, LOW) based on the FULL context — do NOT rely on single keywords.
+3. Write a severityRationale: one concise sentence (max 30 words) explaining the primary reason for this specific severity assignment.
+4. List 3 to 5 precise scientific/engineering expertise fields needed.
+5. Extract 4 to 6 key semantic keywords.
+6. Identify 3 to 4 plausible root causes or operational signals.
+7. Provide transparent, explainable reasoning (2-3 sentences) describing why this classification and severity was chosen, referencing specific evidence in the description.
 `;
 
   const requestBody = {
@@ -364,7 +394,7 @@ Instructions:
       },
     ],
     generationConfig: {
-      temperature: 0.2,
+      temperature: 0.0,
       response_mime_type: 'application/json',
       response_schema: STRUCTURED_RESPONSE_SCHEMA,
     },

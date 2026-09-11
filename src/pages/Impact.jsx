@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   PageHeader,
   Card,
@@ -6,6 +7,7 @@ import {
   CardContent,
   Button,
 } from "../components/ui";
+import { getActiveRole } from '../services/roleState';
 
 // ─── 1. Impact Journey Pipeline Steps ────────────────────────────────────────
 const JOURNEY_STEPS = [
@@ -189,27 +191,20 @@ const LONG_TERM_POINTS = [
   },
 ];
 
-// ─── 6. Responsible Trust Points ─────────────────────────────────────────────
-const TRUST_POINTS = [
-  {
-    title: "Illustrative Prototype Scenarios",
-    desc: "Prototype records are clearly labelled as illustrative demonstration data created for the SIH 2026 prototype.",
-  },
-  {
-    title: "Evidence-Backed Capability Matching",
-    desc: "Institutional matches are based on publicly documented capabilities, labs, and published domain track records.",
-  },
-  {
-    title: "Verified Field Data Requirement",
-    desc: "Real-world impact claims require verified field data and objective criteria before being recorded.",
-  },
-  {
-    title: "Expansion over Fabrication",
-    desc: "No sufficiently supported match → expand the capability registry rather than fabricate a recommendation.",
-  },
-];
 
 export default function Impact() {
+  const [activeRole, setActiveRole] = useState(() => getActiveRole());
+
+  useEffect(() => {
+    const sync = () => setActiveRole(getActiveRole());
+    window.addEventListener('samadhan_active_role_change', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('samadhan_active_role_change', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
   return (
     <div className="space-y-12">
       {/* ── 1. Page Header ──────────────────────────────────────────────── */}
@@ -432,58 +427,7 @@ export default function Impact() {
         </div>
       </div>
 
-      {/* ── 6. Government Value / Decision Support ────────────────────────── */}
-      <div>
-        <Card variant="standard" className="border-slate-200 bg-white shadow-xs">
-          <CardHeader className="pb-2">
-            <span className="text-xs font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-2.5 py-0.5 rounded-md w-fit block mb-1">
-              Administrative Decision Support
-            </span>
-            <CardTitle as="h2" className="text-lg text-slate-900">
-              From Complaints to Decision Support
-            </CardTitle>
-          </CardHeader>
-
-          <CardContent className="pt-2 pb-6 space-y-5">
-            {/* Flow */}
-            <div className="grid grid-cols-2 sm:grid-cols-6 gap-2 text-center">
-              {[
-                { step: "01", label: "Reported Challenge" },
-                { step: "02", label: "AI Triage" },
-                { step: "03", label: "Capability Matches" },
-                { step: "04", label: "Project Lifecycle" },
-                { step: "05", label: "Evidence Review" },
-                { step: "06", label: "Government Decision" },
-              ].map((item, idx) => (
-                <div key={item.label} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5">
-                  <span className="text-[10px] font-bold text-purple-700 block mb-0.5">
-                    STEP {item.step}
-                  </span>
-                  <span className="text-xs font-semibold text-slate-800 block">
-                    {item.label}
-                  </span>
-                  {idx < 5 && (
-                    <span className="hidden sm:inline-block text-[10px] text-slate-300 mt-1">
-                      →
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-
-            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
-              <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
-                Government teams can use the platform to identify priority challenges, review potential institutional capabilities, monitor project progress, and examine evidence before considering scale-up.
-              </p>
-              <p className="text-[11px] text-slate-400 italic mt-1.5">
-                The platform provides structured intelligence and workflow management; administrative decisions, approvals, and budget allocations remain fully under government authority.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── 7. Long-Term Potential ────────────────────────────────────────── */}
+      {/* ── 6. Long-Term Potential ────────────────────────────────────────── */}
       <div>
         <div className="mb-6 space-y-1">
           <h2 className="text-xl font-bold tracking-tight text-slate-900">
@@ -515,40 +459,7 @@ export default function Impact() {
         </div>
       </div>
 
-      {/* ── 8. Responsible Impact ─────────────────────────────────────────── */}
-      <div>
-        <Card variant="subtle" className="border-slate-200 bg-white">
-          <CardHeader className="pb-2">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider block">
-              Integrity & Governance
-            </span>
-            <CardTitle as="h3" className="text-base text-slate-900">
-              Impact With Evidence
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-2">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-              {TRUST_POINTS.map((tp) => (
-                <div key={tp.title} className="bg-slate-50 border border-slate-200 rounded-lg p-3">
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <svg className="h-3.5 w-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <span className="text-xs font-semibold text-slate-800">
-                      {tp.title}
-                    </span>
-                  </div>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    {tp.desc}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* ── 9. Final Call to Action ───────────────────────────────────────── */}
+      {/* ── 7. Final Call to Action ───────────────────────────────────────── */}
       <div className="pt-2 pb-4">
         <div className="rounded-xl bg-slate-900 border border-slate-800 text-white shadow-md">
           <div className="py-8 px-6 sm:px-10 flex flex-col sm:flex-row items-center justify-between gap-6">
@@ -562,14 +473,17 @@ export default function Impact() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 shrink-0">
-              <Button
-                to="/report"
-                variant="secondary"
-                size="md"
-                className="!bg-white !text-slate-900 hover:!bg-slate-100 !border-white font-semibold"
-              >
-                Report a Problem →
-              </Button>
+              {/* Report a Problem: Citizen-only action */}
+              {(!activeRole || activeRole === 'citizen') && (
+                <Button
+                  to="/report"
+                  variant="secondary"
+                  size="md"
+                  className="!bg-white !text-slate-900 hover:!bg-slate-100 !border-white font-semibold"
+                >
+                  Report a Problem →
+                </Button>
+              )}
               <Button
                 to="/challenges"
                 variant="ghost"

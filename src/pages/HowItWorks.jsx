@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import {
   PageHeader,
   Card,
@@ -6,6 +7,7 @@ import {
   CardContent,
   Button,
 } from "../components/ui";
+import { getActiveRole } from '../services/roleState';
 
 // ─── 6 Main Workflow Steps Data ──────────────────────────────────────────────
 const WORKFLOW_STEPS = [
@@ -227,6 +229,18 @@ const TRUST_POINTS = [
 ];
 
 export default function HowItWorks() {
+  const [activeRole, setActiveRole] = useState(() => getActiveRole());
+
+  useEffect(() => {
+    const sync = () => setActiveRole(getActiveRole());
+    window.addEventListener('samadhan_active_role_change', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('samadhan_active_role_change', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
   return (
     <div className="space-y-12">
       {/* ── 1. Page Header ──────────────────────────────────────────────── */}
@@ -431,14 +445,17 @@ export default function HowItWorks() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 shrink-0">
-              <Button
-                to="/report"
-                variant="secondary"
-                size="md"
-                className="!bg-white !text-slate-900 hover:!bg-slate-100 !border-white font-semibold"
-              >
-                Report a Problem →
-              </Button>
+              {/* Report a Problem: Citizen-only action */}
+              {(!activeRole || activeRole === 'citizen') && (
+                <Button
+                  to="/report"
+                  variant="secondary"
+                  size="md"
+                  className="!bg-white !text-slate-900 hover:!bg-slate-100 !border-white font-semibold"
+                >
+                  Report a Problem →
+                </Button>
+              )}
               <Button
                 to="/challenges"
                 variant="ghost"

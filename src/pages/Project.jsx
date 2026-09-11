@@ -16,6 +16,59 @@ import {
   GOV_DECISION_META,
   PENDING_REVIEW_META,
 } from '../services/governmentDecisions';
+import { getCitizenChallengeById, isSeededChallenge } from '../services/challengeStore';
+import {
+  getResearchInterestsForChallenge,
+  getImplementationInterestsForChallenge,
+  COLLAB_INTEREST_UPDATED_EVENT,
+} from '../services/collaborationStore';
+import {
+  createGovernmentDecisionNotifications,
+  createOutcomeVerifiedNotifications,
+  createProgressUpdateNotification,
+} from '../services/notificationStore';
+import {
+  getLifecycleStage,
+  setLifecycleStage,
+  LIFECYCLE_STAGE_UPDATED_EVENT,
+} from '../services/lifecycleStore';
+import { getInstitutionById } from '../data/institutionsRegistry';
+import {
+  getProjectUpdatesForChallenge,
+  submitProjectUpdate,
+  PROJECT_UPDATES_UPDATED_EVENT,
+} from '../services/projectUpdates';
+import {
+  getOutcomeForChallenge,
+  verifyChallengeOutcome,
+  OUTCOMES_UPDATED_EVENT,
+} from '../services/outcomeStore';
+
+/**
+ * Maps seeded challenge IDs to their verified UNIVERSITY MATCH institution IDs.
+ * Used to determine which institutions the logged-in university represents
+ * when viewing a challenge in the Project Lifecycle.
+ * Mirrors the map in Challenges.jsx.
+ */
+const SEEDED_UNIVERSITY_MATCH_IDS = {
+  'bistupur-traffic': ['u-nitjsr', 'u-mobility-ranchi'],
+  'baghmara-groundwater': ['u-env-dhanbad'],
+  'hazaribagh-diagnostic': ['u-rims-ranchi'],
+  'bokaro-irrigation': ['u-bau-ranchi'],
+};
+
+/**
+ * Maps seeded challenge IDs to their verified INDUSTRY MATCH institution IDs.
+ * Used to determine which institutions the logged-in industry partner represents
+ * when viewing a challenge in the Project Lifecycle.
+ * Mirrors the map in Challenges.jsx.
+ */
+const SEEDED_INDUSTRY_MATCH_IDS = {
+  'bistupur-traffic': ['i-tata-motors-jamshedpur'],
+  'baghmara-groundwater': ['i-mecon-ranchi'],
+  'hazaribagh-diagnostic': ['i-apollo-jharkhand'],
+  'bokaro-irrigation': ['i-nsc-jharkhand'],
+};
 
 // --- Seeded project knowledge-base (mirrors AiAnalysis category system) -
 const DEFAULT_CHALLENGE = {
@@ -294,18 +347,18 @@ const STAGES_CONFIG = [
     label: 'Adopted',
     shortDesc: 'Move toward real-world adoption and continued outcome tracking.',
     whatHappens:
-      'The validated solution would be formally transferred to the relevant municipal or civic body for operational management, with continued impact monitoring via the government dashboard.',
-    nextStep: 'Long-term outcome tracking and potential replication in other regions.',
-    protoStatus: 'UPCOMING — Target adoption phase',
+      'The validated solution has reached the adoption stage. The solution can transition into operational use while outcome monitoring and review continue.',
+    nextStep: 'Continue long-term outcome monitoring and evaluate replication based on validated results.',
+    protoStatus: 'ACTIVE — Adoption stage reached',
     actions: [
-      'Formal transfer of operations to municipal engineering department',
-      'Continuous monitoring data integrated into government dashboard',
-      'Long-term community satisfaction and impact auditing',
-      'Replication framework for neighbouring state districts',
+      'Transition the validated solution into operational use',
+      'Continue monitoring outcome indicators',
+      'Review community and implementation feedback',
+      'Evaluate opportunities for responsible replication',
     ],
-    phaseState: 'Stage 05 Phase',
-    milestoneTarget: 'Municipal Transition',
-    progress: 0,
+    phaseState: 'Stage 05 Phase (Active)',
+    milestoneTarget: 'Operational Adoption',
+    progress: 100,
   },
 ];
 
@@ -323,32 +376,6 @@ const STATUS_LABEL = {
   future: 'UPCOMING',
 };
 
-const MILESTONE_UPDATES = [
-  {
-    stageLabel: 'Stage 01 — PROPOSAL',
-    title: 'Project initiated',
-    detail: 'Potential collaborators identified based on capability alignment. Scope defined.',
-    status: 'completed',
-  },
-  {
-    stageLabel: 'Stage 02 — PILOT',
-    title: 'Pilot prototype prepared',
-    detail: 'Technical prototype prepared and passed initial controlled validation.',
-    status: 'completed',
-  },
-  {
-    stageLabel: 'Stage 03 — FIELD TESTING',
-    title: 'Field testing stage entered',
-    detail: 'Prototype prepared for controlled community validation phase.',
-    status: 'active',
-  },
-  {
-    stageLabel: 'Stage 04 — SCALE',
-    title: 'Field testing completion (target)',
-    detail: 'Validation results would be compiled and reviewed before considering potential scale-up.',
-    status: 'upcoming',
-  },
-];
 
 // --- Stage visual helpers -
 function stageStyles(status) {
@@ -392,25 +419,119 @@ function stageStyles(status) {
   }
 }
 
+const STAGE_NAME_TO_INDEX = {
+  Proposal: 0,
+  Pilot: 1,
+  'Field Testing': 2,
+  Scale: 3,
+  Adopted: 4,
+};
+
+function getStageIndexForChallenge(challengeKey, challengeStage) {
+  // Government-advanced stages persist in lifecycleStore — always check first
+  const persisted = getLifecycleStage(challengeKey);
+  if (persisted !== null && typeof persisted.stageIndex === 'number') {
+    return persisted.stageIndex;
+  }
+  // Fall back to hardcoded defaults for seeded challenges
+  if (challengeKey === 'bokaro-irrigation') return 4;
+  if (challengeKey === 'hazaribagh-diagnostic') return 0;
+  if (challengeKey === 'baghmara-groundwater') return 1;
+  if (challengeKey === 'bistupur-traffic') return 2;
+  if (challengeStage && STAGE_NAME_TO_INDEX[challengeStage] !== undefined) {
+    return STAGE_NAME_TO_INDEX[challengeStage];
+  }
+  return 0;
+}
+
+// --- Initial State Helper ---
+function getInitialProjectData(location) {
+  const searchParams = new URLSearchParams(location.search);
+  const explicitId =
+    location.state?.challengeId ||
+    searchParams.get('challengeId') ||
+    searchParams.get('id');
+
+  if (explicitId && SEEDED_CHALLENGES[explicitId]) {
+    const seeded = SEEDED_CHALLENGES[explicitId];
+    return {
+      challenge: seeded.challenge,
+      project: { ...seeded.project },
+      isFromSession: false,
+      challengeKey: explicitId,
+    };
+  }
+
+  if (explicitId) {
+    const citizen = getCitizenChallengeById(explicitId);
+    if (citizen) {
+      const derived = deriveProject({
+        title: citizen.title,
+        category: citizen.category,
+        description: citizen.description,
+        location: citizen.location,
+      });
+      derived.severity = citizen.severity || 'MEDIUM';
+      derived.label = citizen.category || derived.label;
+      if (citizen.collaborators && citizen.collaborators.length > 0) {
+        const uni = citizen.collaborators.find((c) => c.type === 'Research');
+        const ind = citizen.collaborators.find((c) => c.type === 'Industry');
+        if (uni) derived.university = uni.name;
+        if (ind) derived.industry = ind.name;
+      }
+      return {
+        challenge: {
+          ...citizen,
+          isCitizenSubmission: true,
+        },
+        project: derived,
+        isFromSession: false,
+        challengeKey: explicitId,
+      };
+    }
+  }
+
+  try {
+    const stored = sessionStorage.getItem('samadhan_current_problem');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed && parsed.title) {
+        const active = {
+          title: parsed.title,
+          category: parsed.category || DEFAULT_CHALLENGE.category,
+          description: parsed.description || DEFAULT_CHALLENGE.description,
+          location: parsed.location || DEFAULT_CHALLENGE.location,
+        };
+        const derived = deriveProject(active);
+        return {
+          challenge: active,
+          project: derived,
+          isFromSession: true,
+          challengeKey: active.id || 'custom-session-problem',
+        };
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return {
+    challenge: DEFAULT_CHALLENGE,
+    project: deriveProject(DEFAULT_CHALLENGE),
+    isFromSession: false,
+    challengeKey: 'bistupur-traffic',
+  };
+}
+
 // --- Component -
 export default function Project() {
   const location = useLocation();
-  const [challenge, setChallenge] = useState(DEFAULT_CHALLENGE);
-  const [isFromSession, setIsFromSession] = useState(false);
-  const [project, setProject] = useState(() => deriveProject(DEFAULT_CHALLENGE));
+  const [initialData] = useState(() => getInitialProjectData(location));
+  const [challenge, setChallenge] = useState(initialData.challenge);
+  const [isFromSession, setIsFromSession] = useState(initialData.isFromSession);
+  const [project, setProject] = useState(initialData.project);
   const [activeStageIndex, setActiveStageIndex] = useState(() => {
-    try {
-      const storedIdx = sessionStorage.getItem('samadhan_project_stage_idx');
-      if (storedIdx !== null) {
-        const parsed = parseInt(storedIdx, 10);
-        if (!isNaN(parsed) && parsed >= 0 && parsed < STAGES_CONFIG.length) {
-          return parsed;
-        }
-      }
-    } catch {
-      // ignore
-    }
-    return 2; // Default to Field Testing (Stage 03)
+    return getStageIndexForChallenge(initialData.challengeKey, initialData.challenge?.stage);
   });
 
   // Currently selected stage for the detail panel (defaults to active stage)
@@ -421,25 +542,191 @@ export default function Project() {
 
   useEffect(() => {
     const handleRoleChange = (e) => setActiveRoleState(e.detail || getActiveRole());
+    const handleStorage = () => setActiveRoleState(getActiveRole());
     window.addEventListener('samadhan_active_role_change', handleRoleChange);
-    return () => window.removeEventListener('samadhan_active_role_change', handleRoleChange);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      window.removeEventListener('samadhan_active_role_change', handleRoleChange);
+      window.removeEventListener('storage', handleStorage);
+    };
   }, []);
 
+  const currentRole = activeRole || getActiveRole();
+
   // Government simulated decision state
-  const [challengeKey, setChallengeKey] = useState(() => {
-    return location.state?.challengeId || 'bistupur-traffic';
-  });
+  const [challengeKey, setChallengeKey] = useState(initialData.challengeKey);
   const [govDecision, setGovDecision] = useState(() => {
-    const initialKey = location.state?.challengeId || 'bistupur-traffic';
-    const entry = getGovernmentDecision(initialKey);
+    const entry = getGovernmentDecision(initialData.challengeKey);
     return entry ? entry.decision : null;
   });
   const [isChangingDecision, setIsChangingDecision] = useState(false);
+
+  // Project Updates state
+  const [projectUpdates, setProjectUpdates] = useState(() =>
+    getProjectUpdatesForChallenge(initialData.challengeKey)
+  );
+
+  // Outcome verification state
+  const [outcomeRecord, setOutcomeRecord] = useState(() =>
+    getOutcomeForChallenge(initialData.challengeKey)
+  );
+
+  // Reactive sync for updates and outcome records
+  useEffect(() => {
+    const syncUpdates = () => setProjectUpdates(getProjectUpdatesForChallenge(challengeKey));
+    const syncOutcome = () => setOutcomeRecord(getOutcomeForChallenge(challengeKey));
+    window.addEventListener(PROJECT_UPDATES_UPDATED_EVENT, syncUpdates);
+    window.addEventListener(OUTCOMES_UPDATED_EVENT, syncOutcome);
+    window.addEventListener('storage', syncUpdates);
+    window.addEventListener('storage', syncOutcome);
+    return () => {
+      window.removeEventListener(PROJECT_UPDATES_UPDATED_EVENT, syncUpdates);
+      window.removeEventListener(OUTCOMES_UPDATED_EVENT, syncOutcome);
+      window.removeEventListener('storage', syncUpdates);
+      window.removeEventListener('storage', syncOutcome);
+    };
+  }, [challengeKey]);
+
+  // University research interest state
+  const [universityInterests, setUniversityInterests] = useState(() =>
+    getResearchInterestsForChallenge(initialData.challengeKey)
+  );
+
+  useEffect(() => {
+    setUniversityInterests(getResearchInterestsForChallenge(challengeKey));
+  }, [challengeKey]);
+
+  useEffect(() => {
+    const handleInterestUpdate = () => {
+      setUniversityInterests(getResearchInterestsForChallenge(challengeKey));
+    };
+    window.addEventListener(COLLAB_INTEREST_UPDATED_EVENT, handleInterestUpdate);
+    return () => {
+      window.removeEventListener(COLLAB_INTEREST_UPDATED_EVENT, handleInterestUpdate);
+    };
+  }, [challengeKey]);
+
+  // Industry implementation interest state
+  const [industryInterests, setIndustryInterests] = useState(() =>
+    getImplementationInterestsForChallenge(initialData.challengeKey)
+  );
+
+  useEffect(() => {
+    setIndustryInterests(getImplementationInterestsForChallenge(challengeKey));
+  }, [challengeKey]);
+
+  useEffect(() => {
+    const handleInterestUpdate = () => {
+      setIndustryInterests(getImplementationInterestsForChallenge(challengeKey));
+    };
+    window.addEventListener(COLLAB_INTEREST_UPDATED_EVENT, handleInterestUpdate);
+    return () => {
+      window.removeEventListener(COLLAB_INTEREST_UPDATED_EVENT, handleInterestUpdate);
+    };
+  }, [challengeKey]);
+
+  // Submission modal / form state for University / Industry
+  const [isSubmittingUpdate, setIsSubmittingUpdate] = useState(false);
+  const [updateStage, setUpdateStage] = useState(
+    STAGES_CONFIG[activeStageIndex]?.label || 'Field Testing'
+  );
+  const [updateSummary, setUpdateSummary] = useState('');
+  const [evidenceNote, setEvidenceNote] = useState('');
+
+  const handleSubmitUpdate = (e) => {
+    e.preventDefault();
+    if (!updateSummary.trim()) return;
+
+    let instId = null;
+    let instName = null;
+    let updateType = 'Progress Update';
+
+    if (currentRole === 'university') {
+      const matchIds = SEEDED_UNIVERSITY_MATCH_IDS[challengeKey] || [];
+      instId = matchIds[0] || 'u-nitjsr';
+      const instObj = getInstitutionById(instId);
+      instName = instObj?.name || 'NIT Jamshedpur';
+      updateType = 'Research Progress Update';
+    } else if (currentRole === 'industry') {
+      const matchIds = SEEDED_INDUSTRY_MATCH_IDS[challengeKey] || [];
+      instId = matchIds[0] || 'i-tata-motors-jamshedpur';
+      const instObj = getInstitutionById(instId);
+      instName = instObj?.name || 'Tata Motors Limited';
+      updateType = 'Implementation Progress Update';
+    }
+
+    const saved = submitProjectUpdate({
+      challengeId: challengeKey,
+      institutionId: instId,
+      institutionName: instName,
+      role: currentRole,
+      updateType,
+      summary: updateSummary.trim(),
+      stage: updateStage,
+      evidenceNote: evidenceNote.trim(),
+    });
+
+    // Notify Government of the submitted stakeholder progress update
+    createProgressUpdateNotification({
+      challengeId: challengeKey,
+      challengeTitle: challenge?.title || initialData.challenge?.title || challengeKey,
+      updateId: saved.id,
+      institutionId: instId,
+      institutionName: instName,
+      sourceRole: currentRole,
+    });
+
+    setProjectUpdates((prev) => [saved, ...prev.filter((p) => p.id !== saved.id)]);
+    setUpdateSummary('');
+    setEvidenceNote('');
+    setIsSubmittingUpdate(false);
+  };
+
+  const handleVerifyOutcome = () => {
+    if (currentRole !== 'government' || activeStageIndex !== 4) return;
+    const verified = verifyChallengeOutcome({
+      challengeId: challengeKey,
+      summary: 'Government has verified the reported outcome within this prototype workflow.',
+    });
+    setOutcomeRecord(verified);
+    createOutcomeVerifiedNotifications({
+      challengeId: challengeKey,
+      challengeTitle: challenge.title,
+      universityInterests,
+      industryInterests,
+      isCitizenSubmission: Boolean(challenge.isCitizenSubmission),
+    });
+  };
 
   const handleMakeDecision = (decisionKey) => {
     setGovernmentDecision(challengeKey, decisionKey);
     setGovDecision(decisionKey);
     setIsChangingDecision(false);
+
+    // "Support / Proceed to Next Stage" advances the OFFICIAL lifecycle by exactly ONE stage
+    if (decisionKey === 'support') {
+      const nextIdx = Math.min(activeStageIndex + 1, 4);
+      if (nextIdx !== activeStageIndex) {
+        setLifecycleStage(challengeKey, nextIdx);
+        setActiveStageIndex(nextIdx);
+        setSelectedStageIndex(nextIdx);
+        try {
+          sessionStorage.setItem('samadhan_project_stage_idx', String(nextIdx));
+          sessionStorage.setItem('samadhan_project_stage', STAGES_CONFIG[nextIdx].label);
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    createGovernmentDecisionNotifications({
+      challengeId: challengeKey,
+      challengeTitle: initialData.challenge?.title || challengeKey,
+      decisionKey,
+      universityInterests,
+      industryInterests,
+      isCitizenSubmission: !isSeededChallenge(challengeKey),
+    });
   };
 
   const handleSelectStage = (idx) => {
@@ -447,6 +734,9 @@ export default function Project() {
   };
 
   const handleAdvanceStage = (idx) => {
+    if (currentRole !== 'government') return;
+    if (idx < 0 || idx > 4) return;
+    setLifecycleStage(challengeKey, idx);
     setActiveStageIndex(idx);
     setSelectedStageIndex(idx);
     try {
@@ -457,25 +747,89 @@ export default function Project() {
     }
   };
 
+  // Reactive listener for government lifecycle stage changes
   useEffect(() => {
-    // PRIORITY 1: Explicit challenge selected from Dashboard/Challenges via router state.
+    const syncLifecycle = (e) => {
+      const detail = e.detail;
+      if (!detail || detail.challengeId === challengeKey) {
+        const stored = getLifecycleStage(challengeKey);
+        if (stored && typeof stored.stageIndex === 'number') {
+          setActiveStageIndex(stored.stageIndex);
+        }
+      }
+    };
+    window.addEventListener(LIFECYCLE_STAGE_UPDATED_EVENT, syncLifecycle);
+    window.addEventListener('storage', syncLifecycle);
+    return () => {
+      window.removeEventListener(LIFECYCLE_STAGE_UPDATED_EVENT, syncLifecycle);
+      window.removeEventListener('storage', syncLifecycle);
+    };
+  }, [challengeKey]);
+
+  useEffect(() => {
+    // PRIORITY 1: Explicit challenge selected from Dashboard/Challenges via router state or search params.
     // Router state (location.state) is in-memory and never stale — always takes priority.
-    const explicitId = location.state?.challengeId;
+    const searchParams = new URLSearchParams(location.search);
+    const explicitId =
+      location.state?.challengeId ||
+      searchParams.get('challengeId') ||
+      searchParams.get('id');
+
     if (explicitId && SEEDED_CHALLENGES[explicitId]) {
       const seeded = SEEDED_CHALLENGES[explicitId];
+      const stageIdx = getStageIndexForChallenge(explicitId, seeded.challenge?.stage);
       setChallenge(seeded.challenge);
       setIsFromSession(false);
       setProject({ ...seeded.project });
       setChallengeKey(explicitId);
+      setActiveStageIndex(stageIdx);
+      setSelectedStageIndex(stageIdx);
       const entry = getGovernmentDecision(explicitId);
       setGovDecision(entry ? entry.decision : null);
       try {
-        sessionStorage.setItem('samadhan_project_stage', STAGES_CONFIG[activeStageIndex].label);
-        sessionStorage.setItem('samadhan_project_stage_idx', String(activeStageIndex));
+        sessionStorage.setItem('samadhan_project_stage', STAGES_CONFIG[stageIdx].label);
+        sessionStorage.setItem('samadhan_project_stage_idx', String(stageIdx));
       } catch {
         // ignore
       }
       return;
+    } else if (explicitId) {
+      const citizen = getCitizenChallengeById(explicitId);
+      if (citizen) {
+        const stageIdx = getStageIndexForChallenge(explicitId, citizen.stage);
+        setChallenge({
+          ...citizen,
+          isCitizenSubmission: true,
+        });
+        setIsFromSession(false);
+        setActiveStageIndex(stageIdx);
+        setSelectedStageIndex(stageIdx);
+        const derived = deriveProject({
+          title: citizen.title,
+          category: citizen.category,
+          description: citizen.description,
+          location: citizen.location,
+        });
+        derived.severity = citizen.severity || 'MEDIUM';
+        derived.label = citizen.category || derived.label;
+        if (citizen.collaborators && citizen.collaborators.length > 0) {
+          const uni = citizen.collaborators.find((c) => c.type === 'Research');
+          const ind = citizen.collaborators.find((c) => c.type === 'Industry');
+          if (uni) derived.university = uni.name;
+          if (ind) derived.industry = ind.name;
+        }
+        setProject(derived);
+        setChallengeKey(explicitId);
+        const entry = getGovernmentDecision(explicitId);
+        setGovDecision(entry ? entry.decision : null);
+        try {
+          sessionStorage.setItem('samadhan_project_stage', STAGES_CONFIG[stageIdx].label);
+          sessionStorage.setItem('samadhan_project_stage_idx', String(stageIdx));
+        } catch {
+          // ignore
+        }
+        return;
+      }
     }
 
     // PRIORITY 2: Active user submission from Report → AI Analysis flow (sessionStorage).
@@ -537,18 +891,21 @@ export default function Project() {
     setProject(derived);
     const resolvedKey = active.id || (fromSession ? 'custom-session-problem' : 'bistupur-traffic');
     setChallengeKey(resolvedKey);
+    const stageIdx = getStageIndexForChallenge(resolvedKey, active.stage);
+    setActiveStageIndex(stageIdx);
+    setSelectedStageIndex(stageIdx);
     const entry = getGovernmentDecision(resolvedKey);
     setGovDecision(entry ? entry.decision : null);
 
     // Ensure session has current stage
     try {
-      sessionStorage.setItem('samadhan_project_stage', STAGES_CONFIG[activeStageIndex].label);
-      sessionStorage.setItem('samadhan_project_stage_idx', String(activeStageIndex));
+      sessionStorage.setItem('samadhan_project_stage', STAGES_CONFIG[stageIdx].label);
+      sessionStorage.setItem('samadhan_project_stage_idx', String(stageIdx));
     } catch {
       // ignore
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeStageIndex, location.state]);
+  }, [location.state, location.search]);
 
   // Keep selectedStageIndex in sync if activeStageIndex changes externally
   useEffect(() => {
@@ -567,56 +924,210 @@ export default function Project() {
   return (
     <div className="space-y-8">
 
-      {/* --- 1. PAGE HEADER -  */}
+      {/* --- 1. PAGE HEADER --- */}
       <PageHeader
-        breadcrumbs={[
-          { label: 'Home', href: '/' },
-          { label: 'AI Analysis', href: '/ai-analysis' },
-          { label: 'Project Lifecycle' },
-        ]}
-        badge={<Badge variant="neutral">PROJECT LIFECYCLE</Badge>}
+        breadcrumbs={
+          currentRole === 'government'
+            ? [
+                { label: 'Home', href: '/' },
+                { label: 'Government Dashboard', href: '/government' },
+                { label: 'Project Lifecycle' },
+              ]
+            : [
+                { label: 'Home', href: '/' },
+                { label: 'Challenges', href: '/challenges' },
+                { label: 'Project Lifecycle' },
+              ]
+        }
+        badge={
+          currentRole === 'citizen' ? (
+            <Badge variant="neutral">CITIZEN WORKSPACE</Badge>
+          ) : currentRole === 'university' ? (
+            <Badge variant="neutral">UNIVERSITY / RESEARCH WORKSPACE</Badge>
+          ) : currentRole === 'industry' ? (
+            <Badge variant="neutral">INDUSTRY / IMPLEMENTATION WORKSPACE</Badge>
+          ) : currentRole === 'government' ? (
+            <Badge variant="neutral">GOVERNMENT REVIEW WORKSPACE</Badge>
+          ) : (
+            <Badge variant="neutral">PROJECT LIFECYCLE</Badge>
+          )
+        }
         title="Project Lifecycle"
-        description="Track how an identified challenge moves from proposal to potential real-world adoption."
+        description={
+          currentRole === 'citizen'
+            ? 'Track how your reported community challenge moves from submission through research validation, field testing, and potential adoption.'
+            : currentRole === 'university'
+            ? 'Research & Validation Perspective — explore scientific validation, laboratory readiness, and pilot milestones.'
+            : currentRole === 'industry'
+            ? 'Implementation & Scale Perspective — evaluate deployment logistics, field testing, and scalable production.'
+            : currentRole === 'government'
+            ? 'Governance & Review Perspective — review capability evidence, guide milestone progression, and govern administrative decisions.'
+            : 'Track how an identified challenge moves from proposal to potential real-world adoption.'
+        }
         actions={
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
-            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
-            <span>Field Testing Active</span>
+          <div className="flex items-center gap-2.5">
+            {currentRole === 'citizen' && (
+              <Button
+                variant="secondary"
+                size="sm"
+                to="/challenges"
+                state={{ tab: 'my-reports', viewTab: 'my-reports' }}
+                className="text-xs font-semibold text-slate-700 hover:text-slate-900 border-slate-300 shadow-2xs"
+              >
+                ← Back to My Reports
+              </Button>
+            )}
+            {currentRole === 'government' && (
+              <Button
+                variant="secondary"
+                size="sm"
+                to="/government"
+                className="text-xs font-semibold text-slate-700 hover:text-slate-900 border-slate-300 shadow-2xs"
+              >
+                ← Back to Government Dashboard
+              </Button>
+            )}
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" aria-hidden="true" />
+              <span>{STAGES_CONFIG[activeStageIndex]?.label || 'Field Testing'} Active</span>
+            </div>
           </div>
         }
       />
 
-      {/* --- 2. CONTEXT BANNER — "Why am I on this page?" -  */}
-      <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 flex flex-col sm:flex-row sm:items-start gap-4">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-900 text-white" aria-hidden="true">
-          <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" /></svg>
+      {/* --- 2. CONTEXT BANNER — Role-aware perspective banner --- */}
+      {currentRole === 'citizen' ? (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
+          <div className="flex items-start gap-3.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-blue-700 text-white font-bold text-xs" aria-hidden="true">
+              CTZ
+            </div>
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-bold text-blue-900">Citizen Workspace — Report &amp; Track</p>
+                <span className="text-[10px] font-semibold text-blue-700 bg-blue-100/80 px-2 py-0.5 rounded border border-blue-200">
+                  Tracking View
+                </span>
+              </div>
+              <p className="text-xs text-blue-800 leading-relaxed max-w-3xl">
+                Track how your reported challenge is progressing. Universities provide scientific validation, industry evaluates implementation readiness, and government oversees official progression decisions.
+              </p>
+            </div>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            to="/challenges"
+            state={{ tab: 'my-reports', viewTab: 'my-reports' }}
+            className="text-xs font-semibold text-blue-950 bg-white border-blue-200 hover:bg-blue-50 shrink-0 self-start sm:self-center cursor-pointer shadow-2xs"
+          >
+            ← Back to My Reports
+          </Button>
         </div>
-        <div className="space-y-1">
-          <p className="text-sm font-bold text-indigo-900">Why this matters</p>
-          <p className="text-sm text-indigo-800 leading-relaxed max-w-3xl">
-            Samadhan Setu doesn&rsquo;t stop after finding a potential match. The lifecycle helps
-            structure, validate and track the journey from a reported challenge toward a
-            scalable solution — from AI analysis through field validation and potential adoption.
-          </p>
+      ) : currentRole === 'university' ? (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/70 p-4 flex flex-col sm:flex-row sm:items-start gap-3.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-700 text-white font-bold text-xs" aria-hidden="true">
+            UNI
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-violet-900">University / Research Workspace — Research &amp; Validation Perspective</p>
+              <span className="text-[10px] font-semibold text-violet-700 bg-violet-100/80 px-2 py-0.5 rounded border border-violet-200">
+                Read-Only
+              </span>
+            </div>
+            <p className="text-xs text-violet-800 leading-relaxed max-w-3xl">
+              Explore the technical validation milestones for this challenge. Universities provide research leadership, laboratory testing, and evidence validation before field deployment. Administrative progression decisions are governed by Government review.
+            </p>
+          </div>
         </div>
-      </div>
+      ) : currentRole === 'industry' ? (
+        <div className="rounded-xl border border-teal-200 bg-teal-50/70 p-4 flex flex-col sm:flex-row sm:items-start gap-3.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-700 text-white font-bold text-xs" aria-hidden="true">
+            IND
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-teal-900">Industry / Implementation Workspace — Implementation &amp; Scale Perspective</p>
+              <span className="text-[10px] font-semibold text-teal-700 bg-teal-100/80 px-2 py-0.5 rounded border border-teal-200">
+                Read-Only
+              </span>
+            </div>
+            <p className="text-xs text-teal-800 leading-relaxed max-w-3xl">
+              Review deployment pathways and operational readiness for this challenge. Industry partners contribute engineering capability, deployment infrastructure, and scalable manufacturing once solutions pass research validation.
+            </p>
+          </div>
+        </div>
+      ) : currentRole === 'government' ? (
+        <div className="rounded-xl border border-purple-200 bg-purple-50/70 p-4 flex flex-col sm:flex-row sm:items-start gap-3.5">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-purple-700 text-white font-bold text-xs" aria-hidden="true">
+            GOV
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-bold text-purple-900">Government Review Workspace — Administrative Governance</p>
+              <span className="text-[10px] font-semibold text-purple-700 bg-purple-100/80 px-2 py-0.5 rounded border border-purple-200">
+                Decision Authority
+              </span>
+            </div>
+            <p className="text-xs text-purple-800 leading-relaxed max-w-3xl">
+              AI recommends based on capability evidence; government decides whether challenges progress. Review potential collaborators, advance lifecycle stages, and record administrative determinations below.
+            </p>
+          </div>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4 flex flex-col sm:flex-row sm:items-start gap-4">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-indigo-900 text-white" aria-hidden="true">
+            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1.75"><path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" /></svg>
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-bold text-indigo-900">Why this matters</p>
+            <p className="text-sm text-indigo-800 leading-relaxed max-w-3xl">
+              Samadhan Setu doesn&rsquo;t stop after finding a potential match. The lifecycle helps
+              structure, validate and track the journey from a reported challenge toward a
+              scalable solution — from AI analysis through field validation and potential adoption.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* --- 3. CHALLENGE CONTEXT CARD -  */}
       <Card variant="standard">
         <CardHeader className="flex flex-row items-center justify-between border-b border-slate-100 pb-4">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
-              <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200">
-                Citizen Report
+              <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold border ${
+                challenge.isCitizenSubmission
+                  ? 'bg-blue-50 text-blue-800 border-blue-200'
+                  : 'bg-indigo-50 text-indigo-800 border-indigo-200'
+              }`}>
+                {challenge.isCitizenSubmission ? 'Community Submission' : 'Citizen Report'}
               </span>
-              {isFromSession && (
+              {challenge.isCitizenSubmission ? (
+                <span className="text-[11px] text-slate-500 font-medium">
+                  • Prototype community record
+                </span>
+              ) : isFromSession ? (
                 <span className="text-[11px] text-slate-400 font-medium">
                   • Transferred from intake submission
                 </span>
-              )}
+              ) : null}
             </div>
             <CardTitle as="h2">Challenge Being Tracked</CardTitle>
           </div>
-          <Badge variant="neutral">{project.label}</Badge>
+          <div className="flex items-center gap-2.5">
+            <Button
+              id="contextual-view-ai-analysis-btn"
+              variant="secondary"
+              size="sm"
+              to="/ai-analysis"
+              state={{ challengeId: challengeKey }}
+              className="text-xs font-semibold text-indigo-950 bg-indigo-50/70 border-indigo-200 hover:bg-indigo-100 shadow-2xs"
+            >
+              View AI Analysis →
+            </Button>
+            <Badge variant="neutral">{project.label}</Badge>
+          </div>
         </CardHeader>
 
         <CardContent className="p-6">
@@ -634,15 +1145,38 @@ export default function Project() {
                   </svg>
                   <span className="font-medium text-slate-700">{challenge.location}</span>
                 </span>
+                {challenge.submittedBy && (
+                  <span className="text-slate-400">• {challenge.submittedBy}</span>
+                )}
               </div>
-              <div className="flex flex-wrap gap-2">
+              {challenge.description && (
+                <p className="text-xs text-slate-600 leading-relaxed line-clamp-3">
+                  {challenge.description}
+                </p>
+              )}
+              <div className="flex flex-wrap items-center gap-2">
                 <span className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold border ${severityColor}`}>
                   {project.severity} SEVERITY
                 </span>
                 <span className="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-semibold bg-violet-50 text-violet-700 border border-violet-200">
                   AI CLASSIFIED
                 </span>
+                {challenge.severityRationale && (
+                  <span className="text-[11px] text-slate-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80">
+                    <span className="font-semibold text-slate-700">Rationale:</span> {challenge.severityRationale}
+                  </span>
+                )}
               </div>
+              {challenge.requiredExpertise && challenge.requiredExpertise.length > 0 && (
+                <div className="pt-1 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-500">Required Expertise:</span>
+                  {challenge.requiredExpertise.slice(0, 4).map((exp) => (
+                    <span key={exp} className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-indigo-50 text-indigo-800 border border-indigo-200/80">
+                      {exp}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Right: potential collaborators */}
@@ -680,8 +1214,374 @@ export default function Project() {
         </CardContent>
       </Card>
 
+      {/* --- GOVERNMENT ONLY: COLLABORATION INTEREST REVIEW SECTION --- */}
+      {currentRole === 'government' && (
+        <Card variant="standard" className="border-indigo-100 bg-white shadow-xs overflow-hidden">
+          <CardHeader className="border-b border-slate-100 pb-3">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-purple-800 border border-purple-200 mb-1">
+                  Stakeholder Intake Review
+                </div>
+                <CardTitle as="h2" className="text-base font-bold text-slate-900">
+                  Collaboration Interest
+                </CardTitle>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Organizations that have actively expressed interest in contributing research or implementation capabilities.
+                </p>
+              </div>
+              <span className="text-[11px] text-slate-400 font-medium shrink-0">
+                Capability-Verified Intake
+              </span>
+            </div>
+          </CardHeader>
+
+          <CardContent className="p-5 space-y-4">
+            {universityInterests.length === 0 && industryInterests.length === 0 ? (
+              /* Zero interest case */
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-5 text-center space-y-2">
+                <div className="flex items-center justify-center">
+                  <span className="h-8 w-8 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-400 text-sm font-semibold">
+                    ℹ
+                  </span>
+                </div>
+                <p className="text-sm font-semibold text-slate-800">
+                  No collaboration interest has been expressed yet.
+                </p>
+                <p className="text-xs text-slate-500 max-w-md mx-auto leading-relaxed">
+                  Potential matches may still be available based on documented capabilities. As research institutions and industry partners review this challenge, their expressed interest will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* 1. University / Research Interests */}
+                {universityInterests.length > 0 && (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-violet-900">
+                        🎓 University / Research ({universityInterests.length})
+                      </span>
+                      <span className="text-[10px] text-violet-600 font-medium">Research &amp; Validation</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {universityInterests.map((r) => {
+                        const inst = getInstitutionById(r.institutionId);
+                        return (
+                          <div
+                            key={`${r.institutionId}-${r.timestamp}`}
+                            className="rounded-lg border border-violet-200 bg-violet-50/40 p-3.5 space-y-2.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-bold text-violet-950 leading-snug">{r.institutionName}</p>
+                                {inst?.dept && (
+                                  <p className="text-[11px] text-slate-600 mt-0.5 leading-tight">{inst.dept}</p>
+                                )}
+                              </div>
+                              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                                ✓ Research Interest Expressed
+                              </span>
+                            </div>
+
+                            {/* Expertise tags */}
+                            {inst?.expertise && inst.expertise.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {inst.expertise.slice(0, 3).map((exp) => (
+                                  <span
+                                    key={exp}
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-white text-violet-800 border border-violet-100 font-medium"
+                                  >
+                                    {exp}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Facility snippet */}
+                            {inst?.facilities && inst.facilities.length > 0 && (
+                              <p className="text-[11px] text-slate-600 leading-snug">
+                                <span className="font-semibold text-slate-700">Facility:</span> {inst.facilities[0]}
+                              </p>
+                            )}
+
+                            {/* Evidence provenance */}
+                            {inst?.evidenceSources && inst.evidenceSources.length > 0 && (
+                              <p className="text-[10px] text-slate-400 leading-snug">
+                                <span className="font-semibold text-slate-500">Verified via:</span>{' '}
+                                {inst.evidenceSources[0].title}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* 2. Industry / Implementation Interests */}
+                {industryInterests.length > 0 && (
+                  <div className="space-y-2.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-teal-900">
+                        🏭 Industry / Implementation ({industryInterests.length})
+                      </span>
+                      <span className="text-[10px] text-teal-600 font-medium">Implementation &amp; Scale</span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {industryInterests.map((r) => {
+                        const inst = getInstitutionById(r.institutionId);
+                        return (
+                          <div
+                            key={`${r.institutionId}-${r.timestamp}`}
+                            className="rounded-lg border border-teal-200 bg-teal-50/40 p-3.5 space-y-2.5"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-bold text-teal-950 leading-snug">{r.institutionName}</p>
+                                {inst?.dept && (
+                                  <p className="text-[11px] text-slate-600 mt-0.5 leading-tight">{inst.dept}</p>
+                                )}
+                              </div>
+                              <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                <span className="h-1 w-1 rounded-full bg-emerald-500" />
+                                ✓ Implementation Interest Expressed
+                              </span>
+                            </div>
+
+                            {/* Expertise tags */}
+                            {inst?.expertise && inst.expertise.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {inst.expertise.slice(0, 3).map((exp) => (
+                                  <span
+                                    key={exp}
+                                    className="text-[10px] px-1.5 py-0.5 rounded bg-white text-teal-800 border border-teal-100 font-medium"
+                                  >
+                                    {exp}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Facility snippet */}
+                            {inst?.facilities && inst.facilities.length > 0 && (
+                              <p className="text-[11px] text-slate-600 leading-snug">
+                                <span className="font-semibold text-slate-700">Facility:</span> {inst.facilities[0]}
+                              </p>
+                            )}
+
+                            {/* Evidence provenance */}
+                            {inst?.evidenceSources && inst.evidenceSources.length > 0 && (
+                              <p className="text-[10px] text-slate-400 leading-snug">
+                                <span className="font-semibold text-slate-500">Verified via:</span>{' '}
+                                {inst.evidenceSources[0].title}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <p className="text-[11px] text-slate-500 border-t border-slate-100 pt-3 leading-relaxed">
+              <span className="font-semibold text-slate-700">Notice:</span> Expressed interest indicates an organization&rsquo;s willingness to contribute research or implementation capabilities based on documented institutional strengths. Government decision below determines administrative progression of the challenge, not official contractual partnership.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* --- STAKEHOLDER UPDATES & EVIDENCE SECTION --- */}
+      <Card variant="standard" id="stakeholder-updates-section">
+        <CardHeader className="border-b border-slate-100 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200/80 mb-1">
+                Stakeholder Submissions
+              </div>
+              <CardTitle as="h2" className="text-lg">Stakeholder Updates &amp; Evidence</CardTitle>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Milestone evidence and progress reports submitted by University and Industry stakeholders.
+              </p>
+            </div>
+            {/* University Progress Update Action */}
+            {currentRole === 'university' && (
+              <Button
+                id="submit-progress-update-btn"
+                variant="primary"
+                size="sm"
+                onClick={() => setIsSubmittingUpdate(true)}
+                className="bg-violet-700 hover:bg-violet-800 text-xs shrink-0 self-start sm:self-auto"
+              >
+                Submit Progress Update
+              </Button>
+            )}
+            {/* Industry Implementation Update Action */}
+            {currentRole === 'industry' && (
+              <Button
+                id="submit-implementation-update-btn"
+                variant="primary"
+                size="sm"
+                onClick={() => setIsSubmittingUpdate(true)}
+                className="bg-teal-700 hover:bg-teal-800 text-xs shrink-0 self-start sm:self-auto"
+              >
+                Submit Implementation Update
+              </Button>
+            )}
+          </div>
+        </CardHeader>
+
+        <CardContent className="p-5 space-y-5">
+          {/* Submission Modal / Inline Form for University or Industry */}
+          {isSubmittingUpdate && (currentRole === 'university' || currentRole === 'industry') && (
+            <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/40 space-y-4">
+              <div className="flex items-center justify-between border-b border-indigo-100 pb-2.5">
+                <p className="text-xs font-bold text-slate-900">
+                  {currentRole === 'university' ? 'Submit Progress Update' : 'Submit Implementation Update'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsSubmittingUpdate(false)}
+                  className="text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
+                >
+                  ✕ Close
+                </button>
+              </div>
+              <form onSubmit={handleSubmitUpdate} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Reported Stage</label>
+                    <select
+                      value={updateStage}
+                      onChange={(e) => setUpdateStage(e.target.value)}
+                      className="w-full text-xs rounded-lg border border-slate-200 bg-white p-2 text-slate-800 focus:border-indigo-400 focus:outline-none"
+                    >
+                      {STAGES_CONFIG.map((st) => (
+                        <option key={st.num} value={st.label}>{st.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="sm:col-span-2">
+                    <label className="block text-[11px] font-semibold text-slate-700 mb-1">Update Summary *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder={currentRole === 'university' ? 'e.g. Completed initial sensor calibration and baseline data capture' : 'e.g. Deployed test telemetry units along pilot corridor'}
+                      value={updateSummary}
+                      onChange={(e) => setUpdateSummary(e.target.value)}
+                      className="w-full text-xs rounded-lg border border-slate-200 bg-white p-2 text-slate-800 focus:border-indigo-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-700 mb-1">Evidence / Milestone Note</label>
+                  <textarea
+                    rows={2}
+                    placeholder="Briefly describe key findings, testing notes, or milestone observations."
+                    value={evidenceNote}
+                    onChange={(e) => setEvidenceNote(e.target.value)}
+                    className="w-full text-xs rounded-lg border border-slate-200 bg-white p-2 text-slate-800 focus:border-indigo-400 focus:outline-none"
+                  />
+                </div>
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setIsSubmittingUpdate(false)}
+                    className="text-xs"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="sm"
+                    className={`text-xs ${currentRole === 'university' ? 'bg-violet-700 hover:bg-violet-800' : 'bg-teal-700 hover:bg-teal-800'}`}
+                  >
+                    Submit Update
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          {/* Stage Distinction Banner: Distinguish stakeholder reported stage from official government current stage */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50/90 p-3.5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <span className="text-slate-600 font-semibold">Official Government-Controlled Stage:</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-indigo-600" />
+                {STAGES_CONFIG[activeStageIndex]?.label || 'Proposal'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-snug max-w-lg">
+              Stakeholder updates report milestone evidence from academic or industrial perspectives. Official lifecycle stages advance solely through Government review and decision.
+            </p>
+          </div>
+
+          {/* List of Submitted Progress & Evidence Updates */}
+          <div className="space-y-3">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              Submitted Stakeholder Updates ({projectUpdates.length})
+            </p>
+            {projectUpdates.length === 0 ? (
+              <div className="rounded-lg border border-slate-200/80 bg-slate-50/60 p-4 text-center">
+                <p className="text-xs text-slate-500 italic">
+                  No progress updates submitted by stakeholders yet. When universities or industry partners submit research or deployment evidence, it will appear here for government review.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {projectUpdates.map((u) => {
+                  const isUni = u.role === 'university';
+                  return (
+                    <div
+                      key={u.id}
+                      className={`p-3.5 rounded-lg border space-y-2.5 ${
+                        isUni ? 'border-violet-200 bg-violet-50/30' : 'border-teal-200 bg-teal-50/30'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                          isUni ? 'bg-violet-100 text-violet-800 border-violet-200' : 'bg-teal-100 text-teal-800 border-teal-200'
+                        }`}>
+                          {isUni ? '🎓 University / Research' : '🏭 Industry / Implementation'}
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          {new Date(u.createdAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-slate-900 leading-snug">{u.institutionName}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] font-medium text-slate-500">{u.updateType}</span>
+                          <span className="text-slate-300">•</span>
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-white text-slate-700 border border-slate-200">
+                            Reported Stage: {u.stage}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-700 font-medium leading-relaxed">{u.summary}</p>
+                      {u.evidenceNote && (
+                        <div className="rounded bg-white/90 p-2.5 border border-slate-200/60 text-[11px] text-slate-600 leading-relaxed">
+                          <span className="font-semibold text-slate-700">Evidence Note:</span> {u.evidenceNote}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* --- GOVERNMENT REVIEW / DECISION SECTION (Government role only) --- */}
-      {activeRole === 'government' && (
+      {currentRole === 'government' && (
+
       <Card variant="standard" className="border-indigo-100 bg-white shadow-xs overflow-hidden">
         <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-5 text-white flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
@@ -718,20 +1618,14 @@ export default function Project() {
             <div className={`p-4 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 ${GOV_DECISION_META[govDecision].badgeColor}`}>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
-                  <span className={`h-2 w-2 rounded-full ${GOV_DECISION_META[govDecision].badgeDot}`} />
-                  <p className="text-sm font-bold">
-                    {GOV_DECISION_META[govDecision].statusLabel}
-                  </p>
+                  <span className={`h-2.5 w-2.5 rounded-full ${GOV_DECISION_META[govDecision].badgeDot}`} />
+                  <span className="text-xs font-bold uppercase tracking-wider">
+                    {GOV_DECISION_META[govDecision].label}
+                  </span>
                 </div>
-                <p className="text-xs opacity-90 leading-relaxed">
-                  {GOV_DECISION_META[govDecision].lifecycleMessage}
-                </p>
-                <p className="text-[11px] opacity-75">
+                <p className="text-xs text-slate-700 font-medium">
                   {GOV_DECISION_META[govDecision].detail}
                 </p>
-              </div>
-
-              <div className="shrink-0">
                 <Button
                   onClick={() => setIsChangingDecision(true)}
                   variant="secondary"
@@ -853,7 +1747,7 @@ export default function Project() {
       {/* --- 4. LIFECYCLE TRACKER -  */}
       <div>
         {/* Government Determination Reflection in Lifecycle (Government role only) */}
-        {activeRole === 'government' && (
+        {currentRole === 'government' && (
         <div className="mb-4">
           <div className={`p-3 rounded-xl border flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs ${
             govDecision ? GOV_DECISION_META[govDecision].badgeColor : PENDING_REVIEW_META.badgeColor
@@ -928,22 +1822,22 @@ export default function Project() {
                   <p className="text-[10px] text-slate-500 leading-snug px-1">{stage.shortDesc}</p>
                 </button>
 
-                {/* Arrow connector */}
+                {/* Connector line between steps */}
                 {!isLast && (
-                  <div className="flex items-center px-1 shrink-0" aria-hidden="true">
-                    <div className={`w-4 h-0.5 ${s.connector}`} />
-                    <svg className={`h-3.5 w-3.5 -ml-0.5 ${s.arrowColor}`} fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M7.293 4.293a1 1 0 011.414 0l5 5a1 1 0 010 1.414l-5 5a1 1 0 01-1.414-1.414L11.586 10 7.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                    </svg>
-                  </div>
+                  <div
+                    className={`hidden md:block h-0.5 w-4 shrink-0 transition-colors ${
+                      idx < activeStageIndex ? 'bg-emerald-500' : 'bg-slate-200'
+                    }`}
+                    aria-hidden="true"
+                  />
                 )}
               </div>
             );
           })}
         </div>
 
-        {/* Mobile: vertical tracker */}
-        <div className="flex md:hidden flex-col gap-2.5">
+        {/* Mobile: stacked tracker */}
+        <div className="flex md:hidden flex-col gap-2">
           {STAGES_CONFIG.map((stage, idx) => {
             const status = getStageStatus(idx, activeStageIndex);
             const s = stageStyles(status);
@@ -956,27 +1850,30 @@ export default function Project() {
                 onClick={() => handleSelectStage(idx)}
                 aria-label={`Select stage ${stage.num}: ${stage.label}`}
                 aria-pressed={isSelected}
-                className={`flex items-start gap-4 rounded-xl border p-4 ${s.wrapper} cursor-pointer text-left transition-all ${
+                className={`w-full rounded-xl border p-3.5 ${s.wrapper} flex items-center justify-between gap-3 text-left transition-all ${
                   isSelected ? 'outline outline-2 outline-offset-1 outline-indigo-400' : ''
                 }`}
               >
-                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${s.circle}`}>
-                  {status === 'completed' ? (
-                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    stage.num
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className={`text-sm ${s.label}`}>{stage.label}</p>
-                    <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-widest ${s.statusPill}`}>
-                      {STATUS_LABEL[status]}
-                    </span>
+                <div className="flex items-center gap-3">
+                  <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${s.circle}`}>
+                    {status === 'completed' ? (
+                      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    ) : (
+                      stage.num
+                    )}
                   </div>
-                  <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{stage.shortDesc}</p>
+                  <div>
+                    <p className={`text-xs font-bold ${s.label}`}>{stage.label}</p>
+                    <p className="text-[10px] text-slate-400">{stage.shortDesc}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[9px] font-extrabold uppercase tracking-widest ${s.statusPill}`}>
+                    {STATUS_LABEL[status]}
+                  </span>
+                  <span className="text-xs text-slate-400">›</span>
                 </div>
               </button>
             );
@@ -998,29 +1895,31 @@ export default function Project() {
                   </div>
                   <CardTitle as="h3">{selectedStage.label}</CardTitle>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {/* Prev/Next controls (advances active lifecycle stage) */}
-                  <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-[11px]">
-                    <button
-                      type="button"
-                      disabled={activeStageIndex === 0}
-                      onClick={() => handleAdvanceStage(activeStageIndex - 1)}
-                      className="px-2 py-1 font-semibold text-slate-700 hover:text-slate-900 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
-                      title="Move active stage back"
-                    >
-                      ← Prev
-                    </button>
-                    <button
-                      type="button"
-                      disabled={activeStageIndex === STAGES_CONFIG.length - 1}
-                      onClick={() => handleAdvanceStage(activeStageIndex + 1)}
-                      className="px-2 py-1 font-semibold text-indigo-700 hover:text-indigo-900 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
-                      title="Advance active stage"
-                    >
-                      Advance →
-                    </button>
+                {/* Prev/Next controls — restricted to Government only */}
+                {currentRole === 'government' && (
+                  <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200 text-[11px]">
+                      <button
+                        type="button"
+                        disabled={activeStageIndex === 0}
+                        onClick={() => handleAdvanceStage(activeStageIndex - 1)}
+                        className="px-2 py-1 font-semibold text-slate-700 hover:text-slate-900 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
+                        title="Move active stage back"
+                      >
+                        ← Prev
+                      </button>
+                      <button
+                        type="button"
+                        disabled={activeStageIndex === STAGES_CONFIG.length - 1}
+                        onClick={() => handleAdvanceStage(activeStageIndex + 1)}
+                        className="px-2 py-1 font-semibold text-indigo-700 hover:text-indigo-900 disabled:opacity-30 disabled:cursor-not-allowed rounded transition-colors"
+                        title="Advance active stage"
+                      >
+                        Advance →
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </CardHeader>
 
@@ -1098,8 +1997,12 @@ export default function Project() {
             </CardContent>
           </Card>
 
-          {/* Citizen: Government Response (read-only). Other roles: Project Update summary. */}
-          {activeRole === 'citizen' ? (
+          {/* Role-specific detail card:
+              - Citizen: Government Response (read-only)
+              - University: Research & Validation Perspective (read-only)
+              - Industry: Implementation & Scale Perspective (read-only)
+              - Government / default: Operational Milestone Updates */}
+          {currentRole === 'citizen' ? (
             /* --- CITIZEN: GOVERNMENT RESPONSE CARD (read-only) --- */
             <Card variant="standard">
               <CardHeader className="border-b border-slate-100 pb-4">
@@ -1160,7 +2063,7 @@ export default function Project() {
                 {/* Tracking guidance */}
                 <div className="space-y-2 text-xs text-slate-500 leading-relaxed border-t border-slate-100 pt-3">
                   <p>Government review is handled by the appropriate administrative authority.</p>
-                  <p>You can continue to track the progress of this challenge through the project lifecycle above.</p>
+                  <p>Track how your reported challenge is progressing through the 5-stage lifecycle above.</p>
                 </div>
 
                 {/* Prototype disclaimer */}
@@ -1169,39 +2072,192 @@ export default function Project() {
                 </p>
               </CardContent>
             </Card>
-          ) : (
-            /* --- OTHER ROLES: Project Update summary (current active stage) --- */
-            <Card variant="standard">
-              <CardHeader className="border-b border-slate-100 pb-4">
-                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-800 border border-indigo-200/80 mb-1">
-                  Current Stage Update
+          ) : currentRole === 'university' ? (
+            /* --- UNIVERSITY: RESEARCH & VALIDATION PERSPECTIVE (read-only) --- */
+            <Card variant="standard" className="border-violet-200">
+              <CardHeader className="border-b border-violet-100 pb-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 mb-1">
+                      Research &amp; Validation Perspective
+                    </div>
+                    <CardTitle as="h3">Technical Validation &amp; Academic Scope</CardTitle>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                      How university research capabilities contribute to {selectedStage.label} (Stage {selectedStage.num}).
+                    </p>
+                  </div>
+                  <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-violet-50 text-violet-700 border border-violet-200 whitespace-nowrap mt-1">
+                    Read-Only
+                  </span>
                 </div>
-                <CardTitle as="h3">Project Update</CardTitle>
               </CardHeader>
-              <CardContent className="p-6">
+
+              <CardContent className="p-5 space-y-4">
+                <div className="rounded-lg bg-violet-50/50 border border-violet-200/80 p-4 space-y-1.5">
+                  <p className="text-[10px] font-bold text-violet-700 uppercase tracking-widest">
+                    Research Role in {selectedStage.label}
+                  </p>
+                  <p className="text-xs text-slate-700 leading-relaxed">
+                    {selectedStage.num === '01' && 'Formulate technical problem definition, analyze scientific literature, and establish baseline laboratory evaluation protocols.'}
+                    {selectedStage.num === '02' && 'Conduct controlled laboratory experimentation, validate testing equipment, and simulate operational parameters.'}
+                    {selectedStage.num === '03' && 'Oversee on-site sensor calibration, collect empirical field samples, and author rigorous technical validation reports.'}
+                    {selectedStage.num === '04' && 'Analyze multi-site test data, refine operational specifications, and verify cross-condition reproducibility.'}
+                    {selectedStage.num === '05' && 'Publish formal validation studies, establish scientific maintenance standards, and document long-term impact metrics.'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/70">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Academic Leadership
+                    </p>
+                    <p className="text-slate-700 text-xs">
+                      {project.university ? `${project.university} leads experimental validation and scientific documentation.` : 'Independent research institutions provide methodology verification.'}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/70">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Next Validation Gate
+                    </p>
+                    <p className="text-slate-700 text-xs">{selectedStage.nextStep}</p>
+                  </div>
+                </div>
+
+                {/* University research interest status — informational only, no controls */}
                 {(() => {
-                  const current = MILESTONE_UPDATES.find((u) => u.status === 'active') || MILESTONE_UPDATES[activeStageIndex] || MILESTONE_UPDATES[0];
-                  const dotColor = current.status === 'completed' ? 'bg-emerald-600' : current.status === 'active' ? 'bg-indigo-700 ring-4 ring-indigo-100' : 'bg-slate-300';
-                  const titleColor = current.status === 'upcoming' ? 'text-slate-400' : 'text-slate-900';
+                  // Determine which institution IDs are verified matches for this challenge
+                  const matchIds = SEEDED_UNIVERSITY_MATCH_IDS[challengeKey] || [];
+                  // Find interest records that match any of the verified institution IDs
+                  const expressedInterests = universityInterests.filter(
+                    (r) => matchIds.includes(r.institutionId)
+                  );
+                  if (expressedInterests.length === 0) return null;
                   return (
-                    <ol className="relative border-l-2 border-slate-200 ml-3">
-                      <li className="ml-4 relative">
-                        <span className={`absolute -left-[22px] top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full ${dotColor}`} />
-                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                          {current.stageLabel}
-                          {current.status === 'active' && (
-                            <span className="ml-2 text-indigo-600 font-semibold">• CURRENT</span>
-                          )}
-                        </p>
-                        <p className={`text-sm font-semibold mt-0.5 ${titleColor}`}>{current.title}</p>
-                        <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">{current.detail}</p>
-                      </li>
-                    </ol>
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2">
+                      <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">
+                        Research Interest Status
+                      </p>
+                      {expressedInterests.map((r) => (
+                        <div
+                          key={`${r.institutionId}-${r.timestamp}`}
+                          className="flex items-center gap-2 text-xs text-emerald-900"
+                        >
+                          <svg className="h-3.5 w-3.5 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>
+                            <span className="font-semibold">{r.institutionName}</span>
+                            {' '}has expressed research interest in this challenge.
+                          </span>
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-emerald-700/80 leading-relaxed">
+                        Research interest indicates potential technical contribution — not an official partnership or confirmed collaboration.
+                      </p>
+                    </div>
                   );
                 })()}
+
+                <div className="border-t border-slate-100 pt-3 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <span>Universities validate scientific soundness; administrative progression is governed by Government review.</span>
+                  <span className="italic shrink-0">Read-Only</span>
+                </div>
               </CardContent>
             </Card>
-          )}
+          ) : currentRole === 'industry' ? (
+            /* --- INDUSTRY: IMPLEMENTATION & SCALE PERSPECTIVE (read-only) --- */
+            <Card variant="standard" className="border-teal-200">
+              <CardHeader className="border-b border-teal-100 pb-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 mb-1">
+                      Implementation &amp; Scale Perspective
+                    </div>
+                    <CardTitle as="h3">Deployment Readiness &amp; Industrial Scope</CardTitle>
+                    <p className="text-xs text-slate-500 mt-0.5 leading-relaxed">
+                      How industry capabilities support {selectedStage.label} (Stage {selectedStage.num}).
+                    </p>
+                  </div>
+                  <span className="shrink-0 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-teal-50 text-teal-700 border border-teal-200 whitespace-nowrap mt-1">
+                    Read-Only
+                  </span>
+                </div>
+              </CardHeader>
+
+              <CardContent className="p-5 space-y-4">
+                <div className="rounded-lg bg-teal-50/50 border border-teal-200/80 p-4 space-y-1.5">
+                  <p className="text-[10px] font-bold text-teal-700 uppercase tracking-widest">
+                    Implementation Role in {selectedStage.label}
+                  </p>
+                  <p className="text-xs text-slate-700 leading-relaxed">
+                    {selectedStage.num === '01' && 'Assess fabrication feasibility, estimate deployment supply-chain requirements, and evaluate hardware/software integration.'}
+                    {selectedStage.num === '02' && 'Fabricate prototype components, supply specialized sensors or equipment, and verify engineering tolerances.'}
+                    {selectedStage.num === '03' && 'Deploy field infrastructure, conduct stress and durability testing, and manage telemetry data streams.'}
+                    {selectedStage.num === '04' && 'Establish local assembly operations, optimize manufacturing unit cost, and prepare multi-district distribution.'}
+                    {selectedStage.num === '05' && 'Provide ongoing operational support, supply-chain warranty fulfillment, and municipal service-level agreements.'}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/70">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Deployment Partner
+                    </p>
+                    <p className="text-slate-700 text-xs">
+                      {project.industry ? `${project.industry} supports field implementation, hardware, and deployment logistics.` : 'Industry collaborators supply engineering capability.'}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-50 border border-slate-200/70">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
+                      Target Milestone
+                    </p>
+                    <p className="text-slate-700 text-xs">{selectedStage.milestoneTarget}</p>
+                  </div>
+                </div>
+
+                {/* Industry implementation interest status — informational only, no controls */}
+                {(() => {
+                  // Determine which institution IDs are verified matches for this challenge
+                  const matchIds = SEEDED_INDUSTRY_MATCH_IDS[challengeKey] || [];
+                  // Find interest records that match any of the verified institution IDs
+                  const expressedInterests = industryInterests.filter(
+                    (r) => matchIds.includes(r.institutionId)
+                  );
+                  if (expressedInterests.length === 0) return null;
+                  return (
+                    <div className="rounded-lg border border-emerald-200 bg-emerald-50/60 p-3.5 space-y-2">
+                      <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest">
+                        Implementation Interest Status
+                      </p>
+                      {expressedInterests.map((r) => (
+                        <div
+                          key={`${r.institutionId}-${r.timestamp}`}
+                          className="flex items-center gap-2 text-xs text-emerald-900"
+                        >
+                          <svg className="h-3.5 w-3.5 shrink-0 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          <span>
+                            <span className="font-semibold">{r.institutionName}</span>
+                            {' '}has expressed implementation interest in this challenge.
+                          </span>
+                        </div>
+                      ))}
+                      <p className="text-[10px] text-emerald-700/80 leading-relaxed">
+                        Implementation interest indicates potential industrial and scaling contribution — not an official partnership or confirmed collaboration.
+                      </p>
+                    </div>
+                  );
+                })()}
+
+                <div className="border-t border-slate-100 pt-3 flex items-center justify-between gap-2 text-[11px] text-slate-400">
+                  <span>Industry partners provide engineering and deployment scale; administrative progression is governed by Government review.</span>
+                  <span className="italic shrink-0">Read-Only</span>
+                </div>
+              </CardContent>
+            </Card>
+
+          ) : null}
         </div>
 
         {/* Right sidebar */}
@@ -1313,85 +2369,175 @@ export default function Project() {
         </div>
       </div>
 
-      {/* --- 6. IMPACT PREVIEW -  */}
-      <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 mb-1">
-              Impact Monitoring
-            </div>
-            <h2 className="text-xl font-bold tracking-tight text-slate-900">Measuring What Changed</h2>
-          </div>
-          <span className="text-xs text-slate-500 font-medium">
-            Demo metrics — replaced by verified field data upon deployment
-          </span>
-        </div>
-
-        {/* Prototype disclaimer */}
-        <div className="rounded-lg bg-amber-50 border border-amber-200/80 p-3 flex items-center gap-2.5">
-          <svg className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true"><circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" /></svg>
-          <p className="text-xs font-medium text-amber-900">
-            <span className="font-bold">Prototype impact metrics</span> — figures shown represent illustrative targets for this pilot corridor and would be replaced by verified field telemetry upon deployment.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {project.metrics.map((metric) => (
-            <div
-              key={metric.label}
-              className="bg-white border border-slate-200/80 rounded-xl p-5 shadow-xs flex flex-col justify-between gap-2"
-            >
-              <div>
-                <div className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900">
-                  {metric.value}
-                </div>
-                <p className="text-xs font-medium text-slate-500 leading-snug mt-1">{metric.label}</p>
+      {/* --- OUTCOME & IMPACT (STAGE-AWARE SUMMARY & VERIFICATION) --- */}
+      <Card variant="standard" id="outcome-impact-section">
+        <CardHeader className="border-b border-slate-100 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-800 border border-emerald-200 mb-1">
+                Outcome &amp; Impact
               </div>
-              <span className="text-[10px] text-slate-400 font-medium">
-                Prototype impact metric
-              </span>
+              <CardTitle as="h2" className="text-base">Outcome &amp; Impact</CardTitle>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Impact indicators are aligned with the active project verification stage.
+              </p>
             </div>
-          ))}
-        </div>
-      </div>
+            <Button
+              id="view-impact-framework-btn"
+              variant="secondary"
+              size="sm"
+              to="/impact"
+              className="text-xs font-semibold text-emerald-950 bg-emerald-50/80 border-emerald-200 hover:bg-emerald-100 self-start sm:self-auto shrink-0"
+            >
+              View Impact Framework →
+            </Button>
+          </div>
+        </CardHeader>
 
-      {/* --- 7. BOTTOM CTA -  */}
-      <div className="rounded-xl border border-slate-200/80 bg-white p-6 md:p-8 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-6">
-        <div>
-          <h3 className="text-lg font-bold text-slate-900">
-            Ready to measure the outcome?
-          </h3>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-md leading-relaxed">
-            Project progress can be tracked from the first pilot through potential adoption and measurable community impact.
-          </p>
-        </div>
+        <CardContent className="p-5 space-y-4">
+          {/* Outcome Verification Gate */}
+          {outcomeRecord?.status === 'verified' ? (
+            <div className="p-4 rounded-xl border border-emerald-300 bg-emerald-50/80 space-y-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                  <span className="h-2 w-2 rounded-full bg-emerald-600" />
+                  Outcome Verified
+                </span>
+                <span className="text-[11px] text-emerald-800 font-semibold">
+                  • Challenge Closed — Outcome Verified
+                </span>
+              </div>
+              <p className="text-xs text-emerald-950 font-semibold leading-relaxed">
+                Outcome verified. Administrative review concluded.
+              </p>
+              <p className="text-[11px] text-emerald-700 leading-relaxed">
+                {outcomeRecord.summary || 'Government has verified the reported outcome within this prototype workflow.'}
+              </p>
+              <p className="text-[10px] text-emerald-600/80 italic pt-1">
+                Prototype demonstration — represents administrative closure in this demonstrative workflow.
+              </p>
+            </div>
+          ) : activeStageIndex === 4 ? (
+            /* Challenge is at Adopted stage */
+            currentRole === 'government' ? (
+              <div className="p-4 rounded-xl border border-indigo-200 bg-indigo-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-indigo-100 text-indigo-900 border border-indigo-200">
+                      Final Review Gate
+                    </span>
+                    <span className="text-xs font-bold text-slate-900">Stage: Adopted</span>
+                  </div>
+                  <p className="text-xs text-slate-700 leading-relaxed max-w-xl">
+                    Challenge has reached the final adoption stage. Outcome verification is pending. As the government authority, you can verify the reported outcome and close the challenge loop.
+                  </p>
+                </div>
+                <Button
+                  id="gov-verify-outcome-btn"
+                  variant="primary"
+                  size="sm"
+                  onClick={handleVerifyOutcome}
+                  className="bg-emerald-700 hover:bg-emerald-800 text-xs font-semibold shrink-0 cursor-pointer shadow-xs"
+                >
+                  Verify Outcome &amp; Close Challenge
+                </Button>
+              </div>
+            ) : currentRole === 'citizen' ? (
+              <div className="p-3.5 rounded-lg border border-blue-200 bg-blue-50/60 text-xs text-blue-900 leading-relaxed">
+                <span className="font-bold">Challenge has reached the final adoption stage.</span> Outcome verification is pending administrative review.
+              </div>
+            ) : (
+              <div className="p-3.5 rounded-lg border border-slate-200 bg-slate-50 text-xs text-slate-600 leading-relaxed">
+                Challenge has reached the final <span className="font-bold text-slate-800">Adopted</span> stage. Outcome verification is pending.
+              </div>
+            )
+          ) : (
+            /* Challenge is at early/mid stage (< Adopted) */
+            currentRole === 'government' ? (
+              <div className="p-3.5 rounded-lg border border-slate-200/80 bg-slate-50/80 text-xs text-slate-600 flex items-center gap-2">
+                <svg className="w-4 h-4 text-slate-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 16v-4m0-4h.01" />
+                </svg>
+                <span>
+                  Outcome verification becomes available after the solution reaches the final review stage (Adopted). Current official stage: <strong className="text-slate-800">{STAGES_CONFIG[activeStageIndex]?.label || 'Proposal'}</strong>.
+                </span>
+              </div>
+            ) : currentRole === 'citizen' ? (
+              <div className="p-3.5 rounded-lg border border-slate-200/80 bg-slate-50/80 text-xs text-slate-600">
+                Current official stage: <strong className="text-slate-800">{STAGES_CONFIG[activeStageIndex]?.label || 'Proposal'}</strong>. Government response and progress milestones will be updated as validation proceeds.
+              </div>
+            ) : null
+          )}
 
-        <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto flex-wrap">
-          <Button
-            variant="secondary"
-            size="lg"
-            to="/ai-analysis"
-            className="flex-1 sm:flex-initial"
-          >
-            Back to AI Analysis
-          </Button>
+          {/* Stage-aware status summary block */}
+          <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2.5">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-emerald-500" />
+                <span className="text-xs font-bold text-slate-800 uppercase tracking-wide">
+                  Stage {activeStageIndex + 1}: {STAGES_CONFIG[activeStageIndex]?.label || 'Active Stage'}
+                </span>
+              </div>
+              {outcomeRecord?.status === 'verified' ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                  VERIFIED OUTCOME
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-200 text-slate-700 border border-slate-300">
+                  IN PROGRESS
+                </span>
+              )}
+            </div>
 
-          <Button
-            variant="primary"
-            size="lg"
-            to="/impact"
-            className="flex-1 sm:flex-initial bg-indigo-900 hover:bg-indigo-800"
-            icon={
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-              </svg>
-            }
-            iconPosition="right"
-          >
-            Explore Impact Framework
-          </Button>
-        </div>
-      </div>
+            <p className="text-xs text-slate-700 leading-relaxed font-medium">
+              {activeStageIndex === 0 && (
+                'Outcome indicators are defined during initial feasibility assessment. No field indicators recorded yet.'
+              )}
+              {activeStageIndex === 1 && (
+                'Pilot indicators are benchmarked during laboratory and controlled trials. Baseline data collection in progress.'
+              )}
+              {activeStageIndex === 2 && (
+                'Field testing indicators are actively monitored in live test conditions. Real-world validation metrics under observation.'
+              )}
+              {activeStageIndex === 3 && (
+                'Multi-site scale indicators evaluate operational consistency and deployment readiness.'
+              )}
+              {activeStageIndex === 4 && (
+                outcomeRecord?.status === 'verified'
+                  ? 'Outcome verified. Administrative review concluded. Government has verified the reported outcome within this prototype workflow.'
+                  : 'Challenge has reached the final adoption stage. Outcome verification is pending.'
+              )}
+            </p>
+
+            <div className="pt-1 flex flex-wrap items-center gap-3 text-[11px] text-slate-500 border-t border-slate-200/60">
+              <span>Domain: <strong className="text-slate-700">{project.label || challenge.category}</strong></span>
+              <span>•</span>
+              <span>Target Area: <strong className="text-slate-700">{challenge.location || 'Jharkhand'}</strong></span>
+              {outcomeRecord?.verifiedAt && (
+                <>
+                  <span>•</span>
+                  <span>Verified On: <strong className="text-emerald-700">{new Date(outcomeRecord.verifiedAt).toLocaleDateString()}</strong></span>
+                </>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg bg-emerald-50/50 border border-emerald-200/60 p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-xs text-emerald-950">
+            <span>
+              Explore macro impact metrics, district-level outcome indicators, and adoption analytics.
+            </span>
+            <Button
+              variant="primary"
+              size="sm"
+              to="/impact"
+              className="bg-emerald-800 hover:bg-emerald-700 text-xs py-1 px-3 shrink-0 text-white"
+            >
+              View Impact Framework →
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

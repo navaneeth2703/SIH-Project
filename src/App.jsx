@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/layout/Layout';
 import Landing from './pages/Landing';
 import ReportProblem from './pages/ReportProblem';
@@ -15,9 +15,17 @@ export default function App() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Full-bleed layout for Landing (hero needs edge-to-edge) */}
+        {/* Root redirect: / → /login (Login is the first entry point) */}
+        <Route index element={<Navigate to="/login" replace />} />
+
+        {/* Login: no Header — clean first-experience screen */}
+        <Route element={<Layout noHeader />}>
+          <Route path="login" element={<Login />} />
+        </Route>
+
+        {/* Full-bleed layout for Landing (hero needs edge-to-edge); preserved at /home */}
         <Route element={<Layout variant="fullBleed" />}>
-          <Route index element={<Landing />} />
+          <Route path="home" element={<Landing />} />
         </Route>
 
         {/* Standard constrained layout for all other routes */}
@@ -30,7 +38,6 @@ export default function App() {
           <Route path="project-lifecycle" element={<Project />} />
           <Route path="project" element={<Project />} />
           <Route path="government" element={<GovernmentDashboard />} />
-          <Route path="login" element={<Login />} />
           <Route path="report" element={<ReportProblem />} />
           <Route path="*" element={<NotFound />} />
         </Route>

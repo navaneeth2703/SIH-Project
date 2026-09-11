@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   PageHeader,
@@ -10,6 +10,7 @@ import {
   Button,
 } from '../components/ui';
 import { persistProblemReport } from '../services/supabase';
+import { getActiveRole, setActiveRole, PLATFORM_ROLES } from '../services/roleState';
 
 const CATEGORIES = [
   'Water & Environment',
@@ -81,6 +82,17 @@ const EXAMPLES = [
 
 export default function ReportProblem() {
   const navigate = useNavigate();
+  const [activeRole, setActiveRoleState] = useState(() => getActiveRole());
+
+  useEffect(() => {
+    const handleRoleSync = () => setActiveRoleState(getActiveRole());
+    window.addEventListener('samadhan_active_role_change', handleRoleSync);
+    window.addEventListener('storage', handleRoleSync);
+    return () => {
+      window.removeEventListener('samadhan_active_role_change', handleRoleSync);
+      window.removeEventListener('storage', handleRoleSync);
+    };
+  }, []);
 
   const [formData, setFormData] = useState({
     title: DEMO_SAMPLE.title,
@@ -164,6 +176,10 @@ export default function ReportProblem() {
   const handleAnalyzeProblem = async (e) => {
     e.preventDefault();
 
+    if (activeRole && activeRole !== 'citizen') {
+      return;
+    }
+
     if (!validate()) {
       return;
     }
@@ -236,6 +252,63 @@ export default function ReportProblem() {
     });
     setErrors({});
   };
+
+  if (activeRole && activeRole !== 'citizen') {
+    const roleMeta = PLATFORM_ROLES[activeRole];
+    const isGov = activeRole === 'government';
+    const isUni = activeRole === 'university';
+
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          breadcrumbs={[
+            { label: 'Home', href: '/' },
+            { label: 'Report a Problem' },
+          ]}
+          badge={<Badge variant="neutral">{roleMeta?.bannerTitle || 'ROLE RESTRICTION'}</Badge>}
+          title="Citizen Problem Intake"
+          description="Problem reporting is dedicated to citizens and local communities to voice grassroots societal challenges."
+        />
+
+        <Card variant="standard" className="border-slate-200 bg-white p-8 text-center max-w-2xl mx-auto my-8 shadow-xs">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-slate-700 mx-auto mb-4">
+            <svg className="h-6 w-6 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+          </div>
+
+          <h2 className="text-lg font-bold text-slate-900 mb-2">
+            Reporting Restricted to Citizen Role
+          </h2>
+          <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+            You are currently signed in as <strong className="text-slate-900">{roleMeta?.name || activeRole}</strong>. 
+            {isGov 
+              ? ' Government officers can monitor challenges, inspect evidence, and govern progression in the Government workspace.'
+              : isUni
+              ? ' Universities and research institutions discover societal challenges aligned with their technical capabilities on the Challenges workspace.'
+              : ' Industry partners discover implementation, engineering, and deployment opportunities on the Challenges workspace.'}
+          </p>
+
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+            <Button
+              variant="primary"
+              to={isGov ? '/government' : '/challenges'}
+              className="w-full sm:w-auto"
+            >
+              {isGov ? 'Go to Government Dashboard →' : 'Explore Challenges →'}
+            </Button>
+            <Button
+              variant="secondary"
+              onClick={() => setActiveRole('citizen')}
+              className="w-full sm:w-auto"
+            >
+              Switch to Citizen Role
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

@@ -1,6 +1,20 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { getActiveRole } from '../../services/roleState';
 
 export default function Footer() {
+  const [activeRole, setActiveRole] = useState(() => getActiveRole());
+
+  useEffect(() => {
+    const sync = () => setActiveRole(getActiveRole());
+    window.addEventListener('samadhan_active_role_change', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('samadhan_active_role_change', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
   return (
     <footer className="border-t border-slate-200 bg-white">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
@@ -35,11 +49,14 @@ export default function Footer() {
                   Challenges
                 </Link>
               </li>
-              <li>
-                <Link to="/report" className="hover:text-slate-900 transition-colors">
-                  Report a Problem
-                </Link>
-              </li>
+              {/* Report a Problem: Citizen-only action */}
+              {(!activeRole || activeRole === 'citizen') && (
+                <li>
+                  <Link to="/report" className="hover:text-slate-900 transition-colors">
+                    Report a Problem
+                  </Link>
+                </li>
+              )}
               <li>
                 <Link to="/ai-analysis" className="hover:text-slate-900 transition-colors">
                   AI Analysis

@@ -1,13 +1,27 @@
-import { Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
+import { Outlet, useLocation } from 'react-router-dom';
 import Header from './Header';
 import Footer from './Footer';
 
-export default function Layout({ variant = 'public', children }) {
+export default function Layout({ variant = 'public', noHeader = false, children }) {
   const isFullBleed = variant === 'fullBleed';
+  const { pathname, hash } = useLocation();
+
+  useEffect(() => {
+    if (!hash) {
+      window.scrollTo(0, 0);
+    } else {
+      const id = hash.replace('#', '');
+      const el = document.getElementById(id);
+      if (el) {
+        el.scrollIntoView();
+      }
+    }
+  }, [pathname, hash]);
 
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900 font-sans">
-      <Header />
+      {!noHeader && <Header />}
       <main
         className={
           isFullBleed
@@ -21,4 +35,6 @@ export default function Layout({ variant = 'public', children }) {
     </div>
   );
 }
+
+
 

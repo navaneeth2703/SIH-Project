@@ -48,6 +48,167 @@ export function sanitizeErrorMessage(message, apiKey) {
   return sanitized;
 }
 
+// ─── Allowed domain classifications ──────────────────────────────────────────
+const ALLOWED_CLASSIFICATIONS = [
+  'Water & Environment',
+  'Traffic & Transport',
+  'Public Health & Sanitation',
+  'Agriculture & Irrigation',
+  'Civic Infrastructure',
+  'Education & Skill Development',
+  'Energy & Power',
+  'Waste Management',
+  'Disaster Management',
+  'Digital Inclusion',
+];
+
+const ALLOWED_SEVERITIES = ['HIGH', 'MEDIUM', 'LOW'];
+
+/**
+ * Normalize primaryClassification to a canonical domain label.
+ * Handles common LLM variations (e.g. "Traffic and Transportation" → "Traffic & Transport").
+ */
+function normalizeClassification(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  const val = raw.trim();
+
+  // Exact match first
+  for (const allowed of ALLOWED_CLASSIFICATIONS) {
+    if (val.toLowerCase() === allowed.toLowerCase()) return allowed;
+  }
+
+  // Traffic & Transport variants
+  if (/^traffic\s*(?:&|and)\s*transport(?:ation)?$/i.test(val)) return 'Traffic & Transport';
+  if (/transport(?:ation)?\s*(?:&|and)\s*traffic/i.test(val)) return 'Traffic & Transport';
+  if (/road\s*(?:&|and)\s*transport/i.test(val)) return 'Traffic & Transport';
+
+  // Water & Environment variants
+  if (/water\s*(?:&|and)\s*env/i.test(val)) return 'Water & Environment';
+  if (/env\w*\s*(?:&|and)\s*water/i.test(val)) return 'Water & Environment';
+  if (/groundwater/i.test(val) || /water\s*quality/i.test(val)) return 'Water & Environment';
+
+  // Public Health & Sanitation variants
+  if (/public\s*health/i.test(val)) return 'Public Health & Sanitation';
+  if (/health\s*(?:&|and)\s*sanit/i.test(val)) return 'Public Health & Sanitation';
+  if (/sanit\w*\s*(?:&|and)\s*health/i.test(val)) return 'Public Health & Sanitation';
+
+  // Agriculture & Irrigation variants
+  if (/agri\w*\s*(?:&|and)\s*irrig/i.test(val)) return 'Agriculture & Irrigation';
+  if (/irrig\w*\s*(?:&|and)\s*agri/i.test(val)) return 'Agriculture & Irrigation';
+  if (/farming/i.test(val) && /irrig/i.test(val)) return 'Agriculture & Irrigation';
+
+  // Civic Infrastructure variants
+  if (/civic\s*infra/i.test(val)) return 'Civic Infrastructure';
+  if (/infrastructure/i.test(val) && /civic|urban|municipal/i.test(val)) return 'Civic Infrastructure';
+
+  // Waste Management variants
+  if (/waste\s*(?:management|disposal|handling)/i.test(val)) return 'Waste Management';
+
+  // Energy & Power
+  if (/energy\s*(?:&|and)\s*power/i.test(val) || /power\s*(?:&|and)\s*energy/i.test(val)) return 'Energy & Power';
+
+  // Closest partial match (starts-with)
+  for (const allowed of ALLOWED_CLASSIFICATIONS) {
+    if (allowed.toLowerCase().startsWith(val.toLowerCase().substring(0, 6))) return allowed;
+  }
+
+  // Return original trimmed value if no match — will be preserved as-is
+  return val;
+}
+
+/**
+ * Normalize severity to exactly HIGH | MEDIUM | LOW.
+ */
+function normalizeSeverity(raw) {
+  if (!raw || typeof raw !== 'string') return 'MEDIUM';
+  const upper = raw.trim().toUpperCase();
+  if (ALLOWED_SEVERITIES.includes(upper)) return upper;
+  // Handle variants like "High Risk", "Medium Priority", etc.
+  if (/^HIGH/i.test(upper)) return 'HIGH';
+  if (/^LOW/i.test(upper)) return 'LOW';
+  return 'MEDIUM'; // safe fallback
+}
+
+/**
+ * Shared post-AI result validation and normalization.
+ * Applied after every AI provider call to guarantee clean output.
+ */
+export function validateAndNormalizeAiResult(parsed) {
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('AI returned non-object result; cannot normalize.');
+  }
+
+  // Normalize classification
+  const rawClass = parsed.primaryClassification;
+  parsed.primaryClassification = normalizeClassification(rawClass) || rawClass || 'Civic Infrastructure';
+
+  // Normalize severity
+  parsed.severity = normalizeSeverity(parsed.severity);
+
+  // Normalize confidence to 1 decimal place, clamped to 70–99.9
+  if (typeof parsed.confidence === 'number') {
+    if (parsed.confidence <= 1) {
+      parsed.confidence = parseFloat((parsed.confidence * 100).toFixed(1));
+    } else {
+      parsed.confidence = parseFloat(parsed.confidence.toFixed(1));
+    }
+    parsed.confidence = Math.min(99.9, Math.max(70.0, parsed.confidence));
+  } else {
+    parsed.confidence = 80.0;
+  }
+
+  // Ensure arrays
+  parsed.requiredExpertise = Array.isArray(parsed.requiredExpertise) ? parsed.requiredExpertise : [];
+  parsed.extractedKeywords = Array.isArray(parsed.extractedKeywords) ? parsed.extractedKeywords : [];
+  parsed.rootCauses = Array.isArray(parsed.rootCauses) ? parsed.rootCauses : [];
+
+  // Ensure reasoning string
+  if (!parsed.reasoning || typeof parsed.reasoning !== 'string') {
+    parsed.reasoning = 'AI classification based on the submitted problem description and contextual signals.';
+  }
+
+  // Ensure severityRationale string (new field)
+  if (!parsed.severityRationale || typeof parsed.severityRationale !== 'string' || parsed.severityRationale.trim() === '') {
+    // Generate a minimal fallback from reasoning or severity
+    const sev = parsed.severity;
+    parsed.severityRationale = `Assigned ${sev} severity based on the population impact, health/safety signals, and contextual factors described in the problem.`;
+  }
+
+  return parsed;
+}
+
+// ─── Severity Rubric for System Prompt ───────────────────────────────────────
+const SEVERITY_RUBRIC = `
+SEVERITY DECISION CRITERIA — Read carefully and apply based on the COMPLETE context, not individual keywords:
+
+HIGH — Assign when the problem involves ANY of the following:
+  • Immediate or substantial threat to human health, drinking water safety, or physical safety
+  • Chemical, biological, or industrial contamination with public or environmental exposure (e.g. discoloration, odor, chemical runoff, heavy metals, mining effluent in groundwater or waterways)
+  • Critical infrastructure or essential service failure (drinking water supply, sanitation, drainage)
+  • Large number of people affected (village-scale or above), especially vulnerable populations (children, elderly, agricultural communities dependent on water)
+  • Environmental emergency or risk of irreversible environmental damage
+  • Mining, industrial, or agricultural contamination entering the food chain, water supply, or soil
+
+MEDIUM — Assign when the problem involves:
+  • Meaningful community-wide impact but no clear immediate severe health or safety risk
+  • Recurring civic infrastructure or service problem (traffic congestion, intermittent power, drainage issues, road deterioration)
+  • Substantial economic or livelihood impact without acute hazard
+  • Transport, access, or mobility disruption affecting a significant number of people
+  • Agricultural yield or irrigation reliability issues without confirmed contamination
+
+LOW — Assign when the problem involves:
+  • Minor local inconvenience with a small or limited affected population
+  • Non-urgent cosmetic, maintenance, or minor amenity issue
+  • Improvement or enhancement request with no immediate risk to health, safety, or essential services
+  • Isolated, localized issue with no scaling risk
+
+CRITICAL INSTRUCTION:
+Do NOT classify severity based on a single keyword alone.
+Consider the COMPLETE description: location, affected population, described symptoms, implied severity signals (odor, discoloration, illness indicators, contamination signals, service failure severity, urgency language), and the broader context.
+Example: A "water" problem involving contamination from a mining belt near a populated area and affecting drinking water → HIGH.
+Example: A "water" problem involving a leaking tap at a park → LOW.
+Example: A traffic congestion problem affecting thousands of daily commuters → MEDIUM.`;
+
 const GROQ_STRUCTURED_RESPONSE_SCHEMA = {
   name: 'civic_challenge_analysis',
   strict: true,
@@ -57,13 +218,18 @@ const GROQ_STRUCTURED_RESPONSE_SCHEMA = {
       primaryClassification: {
         type: 'string',
         description:
-          'The standardized civic problem domain label, e.g. Water & Environment, Traffic & Transport, Public Health & Sanitation, Agriculture & Irrigation, Civic Infrastructure. For problems involving traffic congestion, road safety, public transportation, pedestrian mobility, parking, intersections, buses, and transport infrastructure, return exactly "Traffic & Transport".',
+          'The standardized civic problem domain label. Use exactly one of: "Water & Environment", "Traffic & Transport", "Public Health & Sanitation", "Agriculture & Irrigation", "Civic Infrastructure", "Energy & Power", "Waste Management", "Disaster Management", "Education & Skill Development", "Digital Inclusion". For traffic congestion, road safety, public transportation, pedestrian mobility, parking, intersections, buses, return exactly "Traffic & Transport".',
       },
       severity: {
         type: 'string',
         enum: ['HIGH', 'MEDIUM', 'LOW'],
         description:
-          'Urgency and community risk level based on population impact, immediate danger, and infrastructure disruption.',
+          'Severity level determined by applying the SEVERITY DECISION CRITERIA from the system prompt. Must be one of HIGH, MEDIUM, or LOW. Consider the complete context — not individual keywords.',
+      },
+      severityRationale: {
+        type: 'string',
+        description:
+          'A single concise sentence (max 30 words) explaining the key reason why this specific severity was assigned. This is shown directly to users. Example: "Potential exposure to contaminated groundwater near a mining area creates an immediate public-health risk for multiple villages."',
       },
       confidence: {
         type: 'number',
@@ -91,12 +257,13 @@ const GROQ_STRUCTURED_RESPONSE_SCHEMA = {
       reasoning: {
         type: 'string',
         description:
-          'A clear, transparent explanation (2-3 sentences) detailing why this problem was categorized this way and what specific evidence in the citizen description drove the severity assessment.',
+          'A clear, transparent explanation (2-3 sentences) detailing why this problem was categorized this way, which specific signals drove the classification, and what evidence in the citizen description justifies the severity assessment.',
       },
     },
     required: [
       'primaryClassification',
       'severity',
+      'severityRationale',
       'confidence',
       'requiredExpertise',
       'extractedKeywords',
@@ -130,21 +297,17 @@ export async function analyzeChallengeWithGroq(problem) {
 
   const systemPrompt = `You are the Lead GovTech AI Triage Specialist for "Samadhan Setu" (Smart India Hackathon SIH26043).
 Your job is to objectively analyze citizen-reported societal challenges and extract structured technical taxonomy so the system can match the problem with suitable university researchers and industry partners.
+${SEVERITY_RUBRIC}
 
 Instructions:
-1. Determine the primary domain classification. Valid classifications include:
-   - "Traffic & Transport": defined for problems involving traffic congestion, road safety, public transportation, pedestrian mobility, parking, intersections, buses, and transport infrastructure. Ensure the returned category exactly matches "Traffic & Transport".
-   - "Water & Environment"
-   - "Public Health & Sanitation"
-   - "Agriculture & Irrigation"
-   - "Civic Infrastructure"
-   (and other standardized civic domains as appropriate).
-2. Assess severity (HIGH, MEDIUM, LOW) based on safety, health, economic impact, or community disruption.
-3. List 3 to 5 precise scientific/engineering expertise fields needed in requiredExpertise.
-4. Extract 4 to 6 key semantic keywords in extractedKeywords.
-5. Identify 3 to 4 plausible root causes or operational signals in rootCauses.
-6. Provide transparent, explainable reasoning describing why this classification and urgency was chosen. Avoid black-box buzzwords.
-7. Return strictly valid JSON adhering to the specified schema.`;
+1. Determine the primary domain classification from the allowed list. Use exactly one of: "Water & Environment", "Traffic & Transport", "Public Health & Sanitation", "Agriculture & Irrigation", "Civic Infrastructure", "Energy & Power", "Waste Management", "Disaster Management", "Education & Skill Development", "Digital Inclusion".
+2. Apply the SEVERITY DECISION CRITERIA above carefully. Assess severity (HIGH, MEDIUM, LOW) considering the FULL context — location, affected population, health/safety implications, contamination signals, infrastructure failure, urgency. Do NOT rely on single keywords.
+3. Write a severityRationale: one concise sentence (max 30 words) explaining the primary reason for this specific severity assignment. This is shown to users — be clear and factual.
+4. List 3 to 5 precise scientific/engineering expertise fields needed in requiredExpertise.
+5. Extract 4 to 6 key semantic keywords in extractedKeywords.
+6. Identify 3 to 4 plausible root causes or operational signals in rootCauses.
+7. Provide transparent, explainable reasoning (2-3 sentences) describing why this classification and severity was chosen, referencing the specific evidence in the description.
+8. Return strictly valid JSON adhering to the specified schema.`;
 
   const userPrompt = `Analyze this citizen report:
 - Problem Title: "${problem.title || 'Untitled'}"
@@ -162,7 +325,7 @@ Instructions:
       type: 'json_schema',
       json_schema: GROQ_STRUCTURED_RESPONSE_SCHEMA,
     },
-    temperature: 0.2,
+    temperature: 0.0,
   };
 
   let response;
@@ -223,38 +386,13 @@ Instructions:
   try {
     const parsed = JSON.parse(rawContent);
 
-    // Normalize confidence to 1 decimal place
-    if (typeof parsed.confidence === 'number') {
-      if (parsed.confidence > 1 && parsed.confidence <= 100) {
-        parsed.confidence = parseFloat(parsed.confidence.toFixed(1));
-      } else if (parsed.confidence <= 1) {
-        parsed.confidence = parseFloat((parsed.confidence * 100).toFixed(1));
-      }
-    }
+    // Apply shared normalization and validation
+    const normalized = validateAndNormalizeAiResult(parsed);
 
-    // Ensure primaryClassification matches exact matching engine domain for Traffic & Transport
-    if (
-      typeof parsed.primaryClassification === 'string' &&
-      /^\s*traffic\s*(?:&|and)\s*transport(?:ation)?\s*$/i.test(parsed.primaryClassification)
-    ) {
-      parsed.primaryClassification = 'Traffic & Transport';
-    }
+    normalized.usedProvider = 'Groq';
+    normalized.usedModel = GROQ_MODEL;
 
-    // Ensure array safety
-    parsed.requiredExpertise = Array.isArray(parsed.requiredExpertise)
-      ? parsed.requiredExpertise
-      : [];
-    parsed.extractedKeywords = Array.isArray(parsed.extractedKeywords)
-      ? parsed.extractedKeywords
-      : [];
-    parsed.rootCauses = Array.isArray(parsed.rootCauses)
-      ? parsed.rootCauses
-      : [];
-
-    parsed.usedProvider = 'Groq';
-    parsed.usedModel = GROQ_MODEL;
-
-    return parsed;
+    return normalized;
   } catch (parseErr) {
     const sanitizedParse = sanitizeErrorMessage(parseErr?.message, trimmedKey);
     const error = new Error(

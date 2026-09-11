@@ -3,11 +3,15 @@
  *
  * Principle: "AI recommends. Government decides."
  *
- * Stores simulated administrative decisions per challenge in sessionStorage.
+ * Stores simulated administrative decisions per challenge in localStorage.
+ * Decisions persist across page refresh and role-switching, which is required
+ * for the notification loop (Step 6A) to work correctly.
+ *
  * Supported decisions: 'support' | 'hold' | 'information_requested' | 'decline'
  */
 
 export const GOV_DECISION_STORAGE_KEY = "samadhan_gov_decisions";
+export const GOV_DECISION_CHANGE_EVENT = "samadhan_gov_decision_change";
 
 export const GOV_DECISION_META = {
   support: {
@@ -64,7 +68,7 @@ export const PENDING_REVIEW_META = {
 
 export function getAllGovernmentDecisions() {
   try {
-    const raw = sessionStorage.getItem(GOV_DECISION_STORAGE_KEY);
+    const raw = localStorage.getItem(GOV_DECISION_STORAGE_KEY);
     return raw ? JSON.parse(raw) : {};
   } catch {
     return {};
@@ -89,9 +93,9 @@ export function setGovernmentDecision(challengeId, decisionKey) {
         updatedAt: new Date().toISOString(),
       };
     }
-    sessionStorage.setItem(GOV_DECISION_STORAGE_KEY, JSON.stringify(all));
-    // Dispatch local storage event for reactive same-tab updates
-    window.dispatchEvent(new Event("samadhan_gov_decision_change"));
+    localStorage.setItem(GOV_DECISION_STORAGE_KEY, JSON.stringify(all));
+    // Dispatch event for reactive same-tab updates
+    window.dispatchEvent(new Event(GOV_DECISION_CHANGE_EVENT));
   } catch {
     // Non-blocking
   }

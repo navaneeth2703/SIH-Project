@@ -146,3 +146,18 @@ export function setActiveRole(roleId) {
     // ignore
   }
 }
+
+/**
+ * Clear the active role from sessionStorage and notify subscribers.
+ * Does NOT clear challenge data or other prototype data.
+ */
+export function clearActiveRole() {
+  try {
+    sessionStorage.removeItem(SAMADHAN_ACTIVE_ROLE_KEY);
+    window.dispatchEvent(
+      new CustomEvent('samadhan_active_role_change', { detail: null })
+    );
+  } catch {
+    // ignore
+  }
+}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   PageHeader,
   Card,
@@ -11,6 +12,128 @@ import {
 import { analyzeChallenge } from '../services/ai';
 import { matchPartnersWithExplanation } from '../services/matching';
 import { persistProblemAnalysis } from '../services/supabase';
+import { getActiveRole } from '../services/roleState';
+import { saveCitizenChallenge, getCitizenChallengeById } from '../services/challengeStore';
+
+// ─── Seeded Challenges Pre-computed Analysis Knowledge-Base ──────────────────
+const SEEDED_CHALLENGES_ANALYSIS = {
+  'bistupur-traffic': {
+    challenge: {
+      id: 'bistupur-traffic',
+      title: 'Severe Traffic Congestion and Lack of Public Bus Connectivity',
+      category: 'Traffic & Transport',
+      description:
+        'Residents report severe traffic congestion and inadequate public bus connectivity causing long commute times and reduced productivity.',
+      location: 'Bistupur, Jamshedpur, Jharkhand',
+      submittedAt: '2026-03-01T10:00:00Z',
+    },
+    analysis: {
+      primaryClassification: 'Traffic & Transport',
+      severity: 'MEDIUM',
+      severityRationale:
+        'Peak-hour transit congestion affects key commercial arteries and community mobility, requiring route optimization and public bus scheduling.',
+      confidence: 91,
+      requiredExpertise: ['Intelligent Transportation Systems', 'Urban Traffic Flow Modeling', 'Fleet Telematics'],
+      extractedKeywords: ['Traffic', 'Congestion', 'Public Bus', 'Urban Mobility', 'Transit Corridor'],
+      rootCauses: [
+        'Insufficient high-capacity public transit vehicles serving peak corridors',
+        'Lack of synchronized traffic signaling along commercial junctions',
+        'Bottlenecks near market crossings without dedicated turning lanes',
+      ],
+      reasoning:
+        'Analyzed commuter travel patterns, junction volumes, and transit connectivity gaps across Bistupur corridor.',
+      usedProvider: 'Groq',
+      usedModel: 'openai/gpt-oss-20b',
+    },
+  },
+  'baghmara-groundwater': {
+    challenge: {
+      id: 'baghmara-groundwater',
+      title: 'Severe groundwater discoloration & odor near Baghmara tube-wells',
+      category: 'Water & Environment',
+      description:
+        'Residents in several villages near the Baghmara mining belt report discolored groundwater and unusual odor from local tube-wells. The issue may be affecting drinking water and agriculture.',
+      location: 'Baghmara, Dhanbad, Jharkhand',
+      submittedAt: '2026-02-15T14:30:00Z',
+    },
+    analysis: {
+      primaryClassification: 'Water & Environment',
+      severity: 'HIGH',
+      severityRationale:
+        'Potential acid mine drainage leaching into potable aquifer creates an urgent public health and environmental hazard for surrounding communities.',
+      confidence: 94,
+      requiredExpertise: ['Groundwater Contaminant Analysis', 'Acid Mine Drainage Remediation', 'Spectral Sensor Testing'],
+      extractedKeywords: ['Groundwater', 'Mine Drainage', 'Tube-wells', 'Contamination', 'Water Quality'],
+      rootCauses: [
+        'Unlined sub-surface mine seepage into local aquifer fissures',
+        'High heavy-metal and sulfate concentration exceeding safe potable thresholds',
+        'Lack of localized community-level water filtration infrastructure',
+      ],
+      reasoning:
+        'Evaluated hydrogeological reports, chemical discoloration markers, and nearby mining proximity.',
+      usedProvider: 'Groq',
+      usedModel: 'openai/gpt-oss-20b',
+    },
+  },
+  'hazaribagh-diagnostic': {
+    challenge: {
+      id: 'hazaribagh-diagnostic',
+      title: 'Diagnostic Lab Access and Vaccine Cold-Chain Uptime in Remote Clusters',
+      category: 'Public Health & Sanitation',
+      description:
+        'Remote clusters in Sadar Block report inadequate diagnostic lab access and frequent cold-chain failures affecting vaccine availability.',
+      location: 'Sadar Block, Hazaribagh, Jharkhand',
+      submittedAt: '2026-01-20T09:15:00Z',
+    },
+    analysis: {
+      primaryClassification: 'Public Health & Sanitation',
+      severity: 'HIGH',
+      severityRationale:
+        'Unreliable cold-chain refrigeration risks vaccine spoilage, and distant diagnostic facilities delay clinical intervention in vulnerable clusters.',
+      confidence: 92,
+      requiredExpertise: ['Public Health Logistics', 'Cold-Chain Monitoring', 'Diagnostic Technology'],
+      extractedKeywords: ['Healthcare', 'Cold Chain', 'Vaccine', 'Diagnostic Lab', 'Rural Health'],
+      rootCauses: [
+        'Intermittent grid power affecting primary health center refrigeration',
+        'Absence of automated temperature telemetry alerts for cold-chain breaks',
+        'Geographic isolation from tertiary clinical testing laboratories',
+      ],
+      reasoning:
+        'Evaluated PHC power continuity logs, diagnostic sample transit times, and vaccine stability parameters.',
+      usedProvider: 'Groq',
+      usedModel: 'openai/gpt-oss-20b',
+    },
+  },
+  'bokaro-irrigation': {
+    challenge: {
+      id: 'bokaro-irrigation',
+      title: 'Crop Irrigation Water Scarcity during Non-Monsoon Cycles',
+      category: 'Agriculture & Irrigation',
+      description:
+        'Smallholder farmers in the Petarwar cluster report severe water scarcity for crop irrigation during non-monsoon periods.',
+      location: 'Petarwar Cluster, Bokaro, Jharkhand',
+      submittedAt: '2025-11-10T11:00:00Z',
+    },
+    analysis: {
+      primaryClassification: 'Agriculture & Irrigation',
+      severity: 'MEDIUM',
+      severityRationale:
+        'Seasonal moisture deficit constrains non-monsoon crop yields, requiring micro-irrigation systems and check dam water harvesting.',
+      confidence: 89,
+      requiredExpertise: ['Micro-Irrigation Engineering', 'Soil Moisture Retention', 'Drought-Resilient Agronomy'],
+      extractedKeywords: ['Agriculture', 'Irrigation', 'Water Scarcity', 'Smallholders', 'Crop Yield'],
+      rootCauses: [
+        'Lack of non-monsoon rainwater capture and micro-check dam storage',
+        'Flood irrigation practices causing high evaporation and runoff losses',
+        'Seasonal drawdown of local shallow water table',
+      ],
+      reasoning:
+        'Assessed rainfall cycle distribution, soil moisture profiles, and smallholder cropping patterns.',
+      usedProvider: 'Groq',
+      usedModel: 'openai/gpt-oss-20b',
+    },
+  },
+};
 
 // ─── Default problem fallback for direct URL access ──────────────────────────
 const DEFAULT_CHALLENGE = {
@@ -30,56 +153,151 @@ const SCORING_FACTORS = [
   { label: 'Evidence & Track Record', weight: 10, desc: 'Public capability evidence and verified implementation history' },
 ];
 
+function getInitialAiAnalysisData(location) {
+  const searchParams = new URLSearchParams(location.search);
+  const targetId =
+    location.state?.challengeId ||
+    searchParams.get('challengeId') ||
+    searchParams.get('id');
+
+  // 1. Explicit seeded challenge
+  if (targetId && SEEDED_CHALLENGES_ANALYSIS[targetId]) {
+    const seeded = SEEDED_CHALLENGES_ANALYSIS[targetId];
+    const matchedPartners = matchPartnersWithExplanation(seeded.analysis, seeded.challenge);
+    return {
+      challenge: seeded.challenge,
+      analysis: {
+        ...seeded.analysis,
+        partners: matchedPartners,
+      },
+      isFromSession: false,
+      loading: false,
+    };
+  }
+
+  // 2. Citizen challenge
+  if (targetId) {
+    const citizen = getCitizenChallengeById(targetId);
+    if (citizen) {
+      const cur = {
+        id: citizen.id,
+        title: citizen.title,
+        category: citizen.category,
+        description: citizen.description,
+        location: citizen.location,
+        submittedAt: citizen.submittedAt,
+        isCitizenSubmission: true,
+      };
+      const aiRes = {
+        primaryClassification: citizen.category,
+        severity: citizen.severity || 'MEDIUM',
+        severityRationale: citizen.severityRationale || 'Evaluated based on community impact, vulnerability, and infrastructure constraints.',
+        confidence: citizen.confidence || 88,
+        requiredExpertise: Array.isArray(citizen.requiredExpertise) && citizen.requiredExpertise.length > 0
+          ? citizen.requiredExpertise
+          : ['Civil Engineering', 'Community Infrastructure', 'Field Validation'],
+        extractedKeywords: Array.isArray(citizen.tags) && citizen.tags.length > 0
+          ? citizen.tags
+          : [citizen.category, 'Community'],
+        rootCauses: Array.isArray(citizen.rootCauses) && citizen.rootCauses.length > 0
+          ? citizen.rootCauses
+          : ['Infrastructure deficit identified through community report'],
+        reasoning: citizen.reasoning || 'Automated multi-factor evaluation of citizen challenge report.',
+        usedProvider: citizen.usedProvider || 'Groq',
+        usedModel: citizen.usedModel || 'openai/gpt-oss-20b',
+      };
+      const matchedPartners = matchPartnersWithExplanation(aiRes, cur);
+      return {
+        challenge: cur,
+        analysis: {
+          ...aiRes,
+          partners: matchedPartners,
+        },
+        isFromSession: false,
+        loading: false,
+      };
+    }
+  }
+
+  // 3. Session problem
+  try {
+    const stored = sessionStorage.getItem('samadhan_current_problem');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      if (parsed && parsed.title) {
+        const cur = {
+          id: parsed.id || null,
+          title: parsed.title,
+          category: parsed.category || 'Water & Environment',
+          description: parsed.description || DEFAULT_CHALLENGE.description,
+          location: parsed.location || DEFAULT_CHALLENGE.location,
+          submittedAt: parsed.submittedAt || null,
+        };
+        const storedAnalysis = sessionStorage.getItem('samadhan_current_analysis');
+        if (storedAnalysis) {
+          try {
+            const parsedAnalysis = JSON.parse(storedAnalysis);
+            if (parsedAnalysis && parsedAnalysis.primaryClassification) {
+              return {
+                challenge: cur,
+                analysis: parsedAnalysis,
+                isFromSession: true,
+                loading: false,
+              };
+            }
+          } catch {}
+        }
+        return {
+          challenge: cur,
+          analysis: null,
+          isFromSession: true,
+          loading: true,
+        };
+      }
+    }
+  } catch {}
+
+  // 4. Default fallback
+  return {
+    challenge: DEFAULT_CHALLENGE,
+    analysis: null,
+    isFromSession: false,
+    loading: false,
+  };
+}
+
 export default function AiAnalysis() {
-  const [challenge, setChallenge] = useState(null);
-  const [isFromSession, setIsFromSession] = useState(false);
-  const [analysis, setAnalysis] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const location = useLocation();
+  const [activeRole, setActiveRoleState] = useState(() => getActiveRole());
+  const [publishedRecord, setPublishedRecord] = useState(null);
+  const [isPublishing, setIsPublishing] = useState(false);
+
+  useEffect(() => {
+    const handleRoleSync = () => setActiveRoleState(getActiveRole());
+    window.addEventListener('samadhan_active_role_change', handleRoleSync);
+    window.addEventListener('storage', handleRoleSync);
+    return () => {
+      window.removeEventListener('samadhan_active_role_change', handleRoleSync);
+      window.removeEventListener('storage', handleRoleSync);
+    };
+  }, []);
+
+  const [initialData] = useState(() => getInitialAiAnalysisData(location));
+  const [challenge, setChallenge] = useState(initialData.challenge);
+  const [isFromSession, setIsFromSession] = useState(initialData.isFromSession);
+  const [analysis, setAnalysis] = useState(initialData.analysis);
+  const [loading, setLoading] = useState(initialData.loading);
   const [loadingStep, setLoadingStep] = useState(1);
   const [error, setError] = useState(null);
 
-  // Load problem from session storage
+  // Sync when location (state or search params) changes after initial mount
   useEffect(() => {
-    try {
-      const stored = sessionStorage.getItem('samadhan_current_problem');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && parsed.title) {
-          setChallenge({
-            id: parsed.id || null,
-            title: parsed.title,
-            category: parsed.category || 'Water & Environment',
-            description: parsed.description || DEFAULT_CHALLENGE.description,
-            location: parsed.location || DEFAULT_CHALLENGE.location,
-            submittedAt: parsed.submittedAt || null,
-          });
-          setIsFromSession(true);
-
-          // Restore previously computed analysis if present in session
-          const storedAnalysis = sessionStorage.getItem('samadhan_current_analysis');
-          if (storedAnalysis) {
-            try {
-              const parsedAnalysis = JSON.parse(storedAnalysis);
-              if (parsedAnalysis && parsedAnalysis.primaryClassification) {
-                setAnalysis(parsedAnalysis);
-                setLoading(false);
-                return;
-              }
-            } catch {
-              // ignore
-            }
-          }
-          return;
-        }
-      }
-    } catch {
-      // Graceful session read fallback
-    }
-
-    // Direct access fallback if no problem in session storage
-    setChallenge(DEFAULT_CHALLENGE);
-    setLoading(false);
-  }, []);
+    const next = getInitialAiAnalysisData(location);
+    setChallenge(next.challenge);
+    setAnalysis(next.analysis);
+    setIsFromSession(next.isFromSession);
+    setLoading(next.loading);
+  }, [location]);
 
   // Execute Gemini AI analysis
   const runAiAnalysis = useCallback(async (currentChallenge) => {
@@ -101,6 +319,7 @@ export default function AiAnalysis() {
       const combinedAnalysis = {
         primaryClassification: aiResult.primaryClassification,
         severity: aiResult.severity,
+        severityRationale: aiResult.severityRationale || '',
         confidence: aiResult.confidence,
         requiredExpertise: aiResult.requiredExpertise || [],
         extractedKeywords: aiResult.extractedKeywords || [],
@@ -148,6 +367,84 @@ export default function AiAnalysis() {
     MEDIUM: 'bg-amber-50 text-amber-700 border-amber-200',
     LOW: 'bg-emerald-50 text-emerald-700 border-emerald-200',
   };
+
+  const hasExplicitTarget = Boolean(
+    location.state?.challengeId ||
+    new URLSearchParams(location.search).get('challengeId') ||
+    new URLSearchParams(location.search).get('id')
+  );
+
+  // University role direct access fallback: guide to Challenges workspace (when no specific challenge is requested)
+  if (!hasExplicitTarget && activeRole === 'university') {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          breadcrumbs={[
+            { label: 'Home', href: '/' },
+            { label: 'Challenges', href: '/challenges' },
+            { label: 'University Workspace' },
+          ]}
+          badge={<Badge variant="neutral">UNIVERSITY / RESEARCH WORKSPACE</Badge>}
+          title="AI Analysis is a Platform Service"
+          description="Samadhan Setu automatically performs AI analysis and capability alignment on community submissions. As a university researcher, your primary workspace is Challenges."
+        />
+        <Card variant="standard" className="border-violet-200 bg-violet-50/20 p-8 text-center max-w-2xl mx-auto my-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-100 text-violet-700 mx-auto mb-4">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 mb-2">
+            Discover Research &amp; Validation Opportunities
+          </h2>
+          <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+            Universities do not need to run or operate the AI analysis directly. The platform automatically evaluates community needs and highlights relevant research, laboratory, and technical capabilities on the Challenges workspace.
+          </p>
+          <div className="flex justify-center gap-3">
+            <Button variant="primary" to="/challenges" className="bg-violet-700 hover:bg-violet-800">
+              Explore Research Challenges →
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
+  // Industry role direct access fallback: guide to Challenges workspace (when no specific challenge is requested)
+  if (!hasExplicitTarget && activeRole === 'industry') {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          breadcrumbs={[
+            { label: 'Home', href: '/' },
+            { label: 'Challenges', href: '/challenges' },
+            { label: 'Industry Workspace' },
+          ]}
+          badge={<Badge variant="neutral">INDUSTRY / IMPLEMENTATION WORKSPACE</Badge>}
+          title="AI Analysis is a Platform Service"
+          description="Samadhan Setu automatically performs AI analysis and capability alignment on community submissions. As an industry partner, your primary workspace is Challenges."
+        />
+        <Card variant="standard" className="border-teal-200 bg-teal-50/20 p-8 text-center max-w-2xl mx-auto my-8">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-teal-100 text-teal-700 mx-auto mb-4">
+            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+            </svg>
+          </div>
+          <h2 className="text-lg font-bold text-slate-900 mb-2">
+            Discover Implementation &amp; Scale Opportunities
+          </h2>
+          <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+            Industry partners do not need to operate the AI engine directly. The platform automatically evaluates community needs and highlights deployment, engineering, and scaling opportunities on the Challenges workspace.
+          </p>
+          <div className="flex justify-center gap-3">
+            <Button variant="primary" to="/challenges" className="bg-teal-700 hover:bg-teal-800">
+              Explore Implementation Challenges →
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -448,22 +745,26 @@ export default function AiAnalysis() {
                     <div className={`p-4 rounded-lg border ${
                       analysis.severity === 'HIGH'
                         ? 'bg-rose-50/50 border-rose-100'
-                        : 'bg-amber-50/50 border-amber-100'
+                        : analysis.severity === 'LOW'
+                          ? 'bg-emerald-50/50 border-emerald-100'
+                          : 'bg-amber-50/50 border-amber-100'
                     }`}>
                       <span className={`text-xs font-medium uppercase tracking-wider ${
-                        analysis.severity === 'HIGH' ? 'text-rose-600' : 'text-amber-600'
+                        analysis.severity === 'HIGH' ? 'text-rose-600' : analysis.severity === 'LOW' ? 'text-emerald-600' : 'text-amber-600'
                       }`}>
                         Urgency &amp; Risk
                       </span>
                       <p className={`text-base font-bold mt-0.5 ${
-                        analysis.severity === 'HIGH' ? 'text-rose-900' : 'text-amber-900'
+                        analysis.severity === 'HIGH' ? 'text-rose-900' : analysis.severity === 'LOW' ? 'text-emerald-900' : 'text-amber-900'
                       }`}>
                         {analysis.severity} SEVERITY
                       </p>
-                      <p className={`text-xs mt-1 ${
-                        analysis.severity === 'HIGH' ? 'text-rose-700/80' : 'text-amber-700/80'
+                      <p className={`text-xs mt-1 leading-relaxed ${
+                        analysis.severity === 'HIGH' ? 'text-rose-700/80' : analysis.severity === 'LOW' ? 'text-emerald-700/80' : 'text-amber-700/80'
                       }`}>
-                        Evaluated against population exposure and community disruption.
+                        {analysis.severityRationale
+                          ? analysis.severityRationale
+                          : 'Evaluated against population exposure and community disruption.'}
                       </p>
                     </div>
                   </div>
@@ -581,7 +882,7 @@ export default function AiAnalysis() {
                 <Card
                   key={partner.name}
                   variant="standard"
-                  className={`${partner.borderClass} transition-colors flex flex-col justify-between`}
+                  className={`${partner.borderClass} transition-colors flex flex-col`}
                 >
                   <CardHeader className="border-b border-slate-100 pb-4">
                     <div className="flex items-start justify-between gap-3">
@@ -619,63 +920,43 @@ export default function AiAnalysis() {
                     </div>
                   </CardHeader>
 
-                  <CardContent className="p-5 space-y-4 flex-1 flex flex-col justify-between">
-                    <div className="space-y-3">
-                      {/* Documented Capabilities */}
-                      {partner.expertise && partner.expertise.length > 0 && (
-                        <div>
-                          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                            Verified Capabilities:
-                          </p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {partner.expertise.slice(0, 4).map((cap) => (
-                              <span
-                                key={cap}
-                                className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80"
-                              >
-                                {cap}
-                              </span>
-                            ))}
-                            {partner.expertise.length > 4 && (
-                              <span className="text-[10px] text-slate-400 self-center">
-                                +{partner.expertise.length - 4} more
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
+                  <CardContent className="p-5 space-y-4 flex-1">
+                    {/* Documented Capabilities */}
+                    {partner.expertise && partner.expertise.length > 0 && (
                       <div>
-                        <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
-                          Matching Criteria &amp; Reasons:
+                        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                          Verified Capabilities:
                         </p>
-                        <ul className="space-y-1.5 text-xs text-slate-600">
-                          {partner.reasons.map((reason) => (
-                            <li key={reason} className="flex items-center gap-2">
-                              <span className="text-emerald-600 font-bold">✓</span>
-                              <span>{reason}</span>
-                            </li>
+                        <div className="flex flex-wrap gap-1.5">
+                          {partner.expertise.slice(0, 4).map((cap) => (
+                            <span
+                              key={cap}
+                              className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80"
+                            >
+                              {cap}
+                            </span>
                           ))}
-                        </ul>
+                          {partner.expertise.length > 4 && (
+                            <span className="text-[10px] text-slate-400 self-center">
+                              +{partner.expertise.length - 4} more
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
 
-                    <div className="pt-3 border-t border-slate-100">
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        to="/project-lifecycle"
-                        onClick={() => {
-                          try {
-                            sessionStorage.setItem('samadhan_selected_partner', JSON.stringify(partner));
-                          } catch {
-                            // ignore
-                          }
-                        }}
-                        className="w-full text-xs font-semibold hover:border-indigo-300 hover:text-indigo-900"
-                      >
-                        Collaborate in Project Lifecycle →
-                      </Button>
+                    <div>
+                      <p className="text-xs font-bold text-slate-700 uppercase tracking-wider mb-2">
+                        Matching Criteria &amp; Reasons:
+                      </p>
+                      <ul className="space-y-1.5 text-xs text-slate-600">
+                        {partner.reasons.map((reason) => (
+                          <li key={reason} className="flex items-center gap-2">
+                            <span className="text-emerald-600 font-bold">✓</span>
+                            <span>{reason}</span>
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   </CardContent>
                 </Card>
@@ -729,43 +1010,108 @@ export default function AiAnalysis() {
             </CardContent>
           </Card>
 
-          {/* 7. Bottom CTA */}
-          <div className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900">
-                Ready for partner collaboration?
-              </h3>
-              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-                Turn this validated analysis into a collaborative pilot with milestone tracking and measurable impact.
-              </p>
-            </div>
+          {/* 7. Bottom CTA & Submission */}
+          {publishedRecord ? (
+            <div className="rounded-xl border border-emerald-300 bg-emerald-50/80 p-6 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="flex items-start gap-3.5">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-xs font-bold text-lg">
+                  ✓
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-200">
+                      Community Submission Published
+                    </span>
+                    <span className="text-xs font-mono text-slate-500">ID: {publishedRecord.id}</span>
+                  </div>
+                  <h3 className="text-base font-bold text-slate-900 mt-1">
+                    Your challenge is now live in the Challenges catalog
+                  </h3>
+                  <p className="text-xs text-slate-600 mt-0.5">
+                    Universities, industry partners, and government reviewers can now view this community challenge.
+                  </p>
+                </div>
+              </div>
 
-            <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto">
-              <Button
-                variant="secondary"
-                size="lg"
-                to="/report"
-                className="flex-1 sm:flex-initial"
-              >
-                Back to Report
-              </Button>
-
-              <Button
-                variant="primary"
-                size="lg"
-                to="/project-lifecycle"
-                className="flex-1 sm:flex-initial bg-indigo-900 hover:bg-indigo-800"
-                icon={
-                  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                  </svg>
-                }
-                iconPosition="right"
-              >
-                View Project Path →
-              </Button>
+              <div className="flex flex-wrap items-center gap-2.5 shrink-0 w-full sm:w-auto">
+                <Button
+                  variant="primary"
+                  size="md"
+                  to={`/project-lifecycle?challengeId=${encodeURIComponent(publishedRecord.id)}`}
+                  state={{ challengeId: publishedRecord.id }}
+                  className="flex-1 sm:flex-initial bg-indigo-900 hover:bg-indigo-800"
+                >
+                  View Project Lifecycle →
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  to="/challenges"
+                  state={{ tab: 'my-reports', viewTab: 'my-reports' }}
+                  className="flex-1 sm:flex-initial"
+                >
+                  View My Reports
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  to="/challenges"
+                  className="flex-1 sm:flex-initial text-slate-600 hover:text-slate-900"
+                >
+                  View in Challenges →
+                </Button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="rounded-xl border border-slate-200/80 bg-white p-6 shadow-xs flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Ready to publish this community challenge?
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                  Publishing saves this record as a prototype community challenge and makes it visible in the Challenges workspace.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 shrink-0 w-full sm:w-auto">
+                <Button
+                  variant="secondary"
+                  size="lg"
+                  to="/report"
+                  className="flex-1 sm:flex-initial"
+                >
+                  Back to Report
+                </Button>
+
+                <Button
+                  variant="primary"
+                  size="lg"
+                  onClick={() => {
+                    if (!challenge || !analysis) return;
+                    setIsPublishing(true);
+                    try {
+                      const saved = saveCitizenChallenge({ problem: challenge, analysis });
+                      setPublishedRecord(saved);
+                    } catch (err) {
+                      console.error('Failed to publish challenge:', err);
+                    } finally {
+                      setIsPublishing(false);
+                    }
+                  }}
+                  disabled={isPublishing || loading || Boolean(error)}
+                  className="flex-1 sm:flex-initial bg-indigo-900 hover:bg-indigo-800"
+                  icon={
+                    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+                    </svg>
+                  }
+                  iconPosition="right"
+                >
+                  {isPublishing ? 'Publishing...' : 'Submit & Publish Challenge →'}
+                </Button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
